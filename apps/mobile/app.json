@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Wasla",
+    "slug": "wasla",
+    "scheme": "wasla",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F4F6F5",
+    "ios": {
+      "bundleIdentifier": "app.wasla.mobile",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Wasla uses your location to suggest nearby pickup points and to share live trips with people you choose.",
+        "CFBundleAllowMixedLocalizations": true
+      }
+    },
+    "android": {
+      "package": "app.wasla.mobile",
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "locales": {
+      "ar": "./locales/ar.json",
+      "en": "./locales/en.json"
+    },
+    "extra": {
+      "supportsRTL": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-localization",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Wasla uses your location to suggest nearby pickup points and to share live trips with people you choose."
+        }
+      ],
+      "expo-notifications",
+      ["expo-splash-screen", { "backgroundColor": "#0B6E5F" }]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
