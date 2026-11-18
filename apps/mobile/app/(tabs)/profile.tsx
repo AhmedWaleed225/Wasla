@@ -51,6 +51,8 @@ export default function Profile() {
           </>
         ) : null}
         <Divider />
+        <Row icon="shield" title={t('safety.title')} onPress={() => router.push('/safety')} />
+        <Divider />
         <Row icon="gear" title={t('profile.settings')} onPress={() => router.push('/settings')} />
       </Card>
       {me.roles.includes('DRIVER') ? <T variant="caption" color={colors.textSecondary}>{t('home.driverPending')}</T> : null}

@@ -120,13 +120,49 @@ outside production.
 | POST | `/me/push-devices` | `{ token: "ExponentPushToken[…]", platform: ios\|android }` | 204 | Re-registering moves a token to the current user |
 | DELETE | `/me/push-devices` | `{ token }` | 204 | Call on logout |
 
+## Ratings, reports and blocking (`src/trust/trust.controller.ts`)
+
+| Method | Path | Input | Returns | Notes |
+|---|---|---|---|---|
+| GET | `/bookings/:id/rating` | — | `RatingStatusDto` | Who you'd rate, `canRate`, deadline, your rating. Booking parties only |
+| POST | `/bookings/:id/rating` | `{ stars (1–5), tags?, comment? }` | `RatingDto` (201) | 20/min. `RATING_NOT_ALLOWED` before completion, `RATING_WINDOW_CLOSED` after 14 days, `RATING_ALREADY_EXISTS`, `RATING_TAG_NOT_ALLOWED` (driving tags on a passenger) |
+| POST | `/reports` | `{ bookingId, reportedUserId, reason, details?, block? }` | `ReportDto` (201) | 10/min, 10/day. `REPORT_NOT_ALLOWED` unless both shared that booking; `REPORT_ALREADY_OPEN`. `block: true` also blocks |
+| GET | `/me/reports` | — | `ReportDto[]` | Reports you filed |
+| GET | `/me/blocks` | — | `BlockedUserDto[]` | Only people *you* blocked |
+| POST | `/me/blocks` | `{ userId }` | 204 | Idempotent; ends bookings between you on rides that haven't left. `BLOCK_SELF` |
+| DELETE | `/me/blocks/:userId` | — | 204 | |
+
+## Admin console (`src/admin/admin.controller.ts`)
+
+Authenticated by the `wasla_admin` cookie, not a bearer token. Every request that changes data must
+send `X-Wasla-Admin: 1` (`ADMIN_CSRF` otherwise). Each route needs a permission
+([roles](12-admin-console.md#roles)); `ADMIN_FORBIDDEN` otherwise. Hidden from Swagger.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/admin/auth/login` | — | `{ email, password }` → `AdminMeDto` + cookie. 5/min. `ADMIN_LOGIN_FAILED`, `ADMIN_LOCKED` |
+| POST | `/admin/auth/logout` | signed in | Revokes the session, clears the cookie |
+| GET | `/admin/auth/me` | signed in | `AdminMeDto` |
+| GET | `/admin/overview` | viewOverview | Counts and 7-day bookings |
+| GET | `/admin/users` | viewUsers | `?q=&status=&page=` — name or phone digits; phone masked unless viewUserContact |
+| GET | `/admin/users/:id` | viewUsers | Account, cars, ratings with comments, reports, recent rides and bookings (audited) |
+| POST | `/admin/users/:id/suspend` | suspendUsers | `{ reason }` — signs out, cancels rides and bookings |
+| POST | `/admin/users/:id/reinstate` | suspendUsers | `{ reason }` |
+| GET | `/admin/rides` | viewRides | `?q=&status=&page=` |
+| GET | `/admin/rides/:id` | viewRides | With car, plate and bookings |
+| POST | `/admin/rides/:id/cancel` | cancelRides | `{ reason }` — passengers notified |
+| GET | `/admin/reports` | viewReports | `?status=urgent|OPEN|…&page=` — open first |
+| GET | `/admin/reports/:id` | viewReports | With the trip and (viewReportChat) its chat — audited |
+| PATCH | `/admin/reports/:id` | handleReports | `{ status?, adminNote? }` |
+| GET | `/admin/audit` | viewAudit | `?q=<action prefix>&status=<entity type>&page=` |
+
 ## Main response shapes
 
 Defined in `packages/shared/src/api-types.ts`:
 
 - **`MeDto`** `{ id, phone, locale, roles, activeRole, status, createdAt, profile: ProfileDto|null, stats }`
 - **`ProfileDto`** `{ fullName, displayName, dateOfBirth, gender, bio, photoUrl, preferences, showGender, showFullLastName }`
-- **`PublicUserDto`** `{ id, displayName, gender|null, memberSince, ridesCompleted, ratingAverage: null }` — what *other* people see
+- **`PublicUserDto`** `{ id, displayName, gender|null, memberSince, ridesCompleted, ratingAverage|null, ratingCount }` — what *other* people see; the average appears from 3 ratings
 - **`VehicleDto`** `{ id, make, model, color, year, seats, plate|null }` — `plate` only for the owner and confirmed passengers
 - **`RideSummaryDto`** `{ id, status, departureAt, origin, destination, distanceKm, pricePerSeatPiasters, currency, seatsTotal, seatsAvailable, bookingMode, womenOnly, driver, vehicle, match? }`
 - **`RideDetailDto`** = summary + `{ notes, preferences, priceLimits, isMine, myBooking, bookings (driver only), cancelReason }`

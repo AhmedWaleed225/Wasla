@@ -70,6 +70,9 @@ const ICONS = {
   plus: <Path d="M12 5v14M5 12h14" />,
   minus: <Path d="M5 12h14" />,
   send: <Path d="M4 12 20 4l-6 16-3-7z" />,
+  star: <Path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" />,
+  flag: <Path d="M5 21V4M5 4h11l-2 4 2 4H5" />,
+  phone: <Path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z" />,
   clock: (
     <>
       <Circle cx={12} cy={12} r={9} />

@@ -62,6 +62,7 @@ jobs:
           pnpm --filter @wasla/shared typecheck
           pnpm --filter @wasla/api typecheck
           pnpm --filter @wasla/mobile typecheck
+          pnpm --filter @wasla/admin typecheck
 
       - name: Shared unit tests
         run: pnpm --filter @wasla/shared test
@@ -74,6 +75,9 @@ jobs:
 
       - name: API production build
         run: pnpm --filter @wasla/api build
+
+      - name: Admin console build
+        run: pnpm --filter @wasla/admin build
 
   mobile-bundle:
     name: Android bundle

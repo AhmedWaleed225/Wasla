@@ -24,6 +24,21 @@ function useRefreshLists() {
 }
 
 const openChat = (bookingId: string) => router.push({ pathname: '/chat/[bookingId]', params: { bookingId } });
+const openRate = (bookingId: string) => router.push({ pathname: '/rate/[bookingId]', params: { bookingId } });
+const openReport = (bookingId: string, userId: string, name: string) => router.push({ pathname: '/report', params: { bookingId, userId, name } });
+
+/** "★ 4.6 (12)" once there are enough ratings, otherwise trips completed or "New". */
+function useReputation() {
+  const { t } = useTranslation();
+  const f = useFormat();
+  return (u: { ratingAverage: number | null; ratingCount: number; ridesCompleted: number }) =>
+    [
+      u.ratingAverage !== null ? t('rating.ratingShort', { avg: f.number(u.ratingAverage), count: f.number(u.ratingCount) }) : null,
+      u.ridesCompleted > 0 ? t('ride.trips', { count: u.ridesCompleted }) : t('ride.newMember'),
+    ]
+      .filter(Boolean)
+      .join(' · ');
+}
 
 function confirm(title: string, body: string, yes: string, no: string, onYes: () => void) {
   Alert.alert(title, body, [
@@ -36,6 +51,7 @@ export default function RideDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useTranslation();
   const f = useFormat();
+  const reputation = useReputation();
   const q = useQuery({ queryKey: rideKey(id), queryFn: () => ridesApi.get(id) });
 
   if (q.isPending) {
@@ -86,9 +102,7 @@ export default function RideDetail() {
           <View style={{ flex: 1 }}>
             <T variant="caption" muted>{t('ride.driver')}</T>
             <T weight={600}>{ride.driver.displayName}</T>
-            <T variant="caption" muted>
-              {ride.driver.ridesCompleted > 0 ? t('ride.trips', { count: ride.driver.ridesCompleted }) : t('ride.newMember')}
-            </T>
+            <T variant="caption" muted>{reputation(ride.driver)}</T>
           </View>
         </View>
         <Divider />
@@ -184,6 +198,7 @@ function PassengerPanel({ ride }: { ride: RideDetailDto }) {
           loading={cancel.isPending}
           onPress={() => confirm(t('ride.cancelBooking'), t('ride.cancelBookingConfirm'), t('ride.cancelBooking'), t('common.back'), () => cancel.mutate(mine.id))}
         />
+        <Button title={t('report.action')} kind="ghost" icon="flag" onPress={() => openReport(mine.id, ride.driver.id, ride.driver.displayName)} />
       </Card>
     );
   }
@@ -193,7 +208,13 @@ function PassengerPanel({ ride }: { ride: RideDetailDto }) {
       <View style={{ gap: 8 }}>
         {mine ? <StatusTag booking={mine.status} /> : null}
         <Notice tone="neutral" icon="lock" text={t('ride.closed')} />
-        {mine?.status === 'COMPLETED' ? <Button title={t('chat.openChat')} kind="tonal" icon="chat" onPress={() => openChat(mine.id)} /> : null}
+        {mine?.status === 'COMPLETED' ? (
+          <>
+            <Button title={t('rating.rateDriver')} icon="star" onPress={() => openRate(mine.id)} />
+            <Button title={t('chat.openChat')} kind="tonal" icon="chat" onPress={() => openChat(mine.id)} />
+          </>
+        ) : null}
+        {mine ? <Button title={t('report.action')} kind="ghost" icon="flag" onPress={() => openReport(mine.id, ride.driver.id, ride.driver.displayName)} /> : null}
       </View>
     );
   }
@@ -311,9 +332,19 @@ function PassengerRow({ booking, rideId, canAnswer }: { booking: DriverBookingDt
       {booking.pickupNote ? <T variant="meta" muted>“{booking.pickupNote}”</T> : null}
       {booking.status === 'PENDING' && booking.expiresAt ? <T variant="caption" muted>⏱ {f.dayTime(booking.expiresAt)}</T> : null}
       {err ? <Notice tone="error" icon="close" text={err.message} /> : null}
-      {booking.status === 'PENDING' || booking.status === 'CONFIRMED' || booking.status === 'COMPLETED' ? (
-        <Button title={t('chat.openChat')} kind="ghost" icon="chat" onPress={() => openChat(booking.id)} />
-      ) : null}
+      {booking.status === 'COMPLETED' ? <Button title={t('rating.ratePassenger')} icon="star" onPress={() => openRate(booking.id)} /> : null}
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        {booking.status === 'PENDING' || booking.status === 'CONFIRMED' || booking.status === 'COMPLETED' ? (
+          <Button title={t('chat.openChat')} kind="ghost" icon="chat" style={{ flex: 1 }} onPress={() => openChat(booking.id)} />
+        ) : null}
+        <Button
+          title={t('report.action')}
+          kind="ghost"
+          icon="flag"
+          style={{ flex: 1 }}
+          onPress={() => openReport(booking.id, booking.passenger.id, booking.passenger.displayName)}
+        />
+      </View>
       {canAnswer && booking.status === 'PENDING' ? (
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Button title={t('ride.decline')} kind="secondary" style={{ flex: 1 }} loading={decline.isPending} disabled={accept.isPending} onPress={() => decline.mutate()} />

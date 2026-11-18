@@ -49,6 +49,7 @@ Set `OTP_MOCK_FIXED_CODE=123456` in `.env` for a fixed code.
 | `pnpm db:migrate` / `db:seed` / `db:reset` | Prisma in the API package |
 | `pnpm api:dev` | API in watch mode on port 4000 |
 | `pnpm mobile:dev` | Expo dev server |
+| `pnpm admin:dev` | Admin console on http://localhost:3000 (proxies `/v1` to the API) |
 
 ## API environment variables (`apps/api/.env`)
 
@@ -69,7 +70,7 @@ Set `OTP_MOCK_FIXED_CODE=123456` in `.env` for a fixed code.
 | `PUSH_PROVIDER` | | none | `none` or `expo` |
 | `EXPO_ACCESS_TOKEN` | | | Only if Expo "enhanced push security" is on |
 | `LOG_LEVEL` | | info | pino level |
-| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | | | Optional: create an admin when seeding |
+| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | | | Optional: `pnpm db:seed` creates a console `SUPER_ADMIN` (password 12+ characters) |
 
 Startup fails with a list of every problem if any value is invalid.
 
@@ -107,6 +108,7 @@ to start in production if its keys are missing.
 - [ ] `CORS_ORIGINS` set to the admin dashboard's origin only.
 - [ ] Rate limits moved to Redis if more than one API instance runs.
 - [ ] Driver verification (ID, licence, car papers) gating ride publishing.
+- [ ] Console served over HTTPS on the same domain as the API, ideally behind a VPN or IP allow-list.
 - [ ] Seed coordinates for every pickup-critical point checked on the ground.
 - [ ] Database backups and point-in-time recovery; migrations applied with `prisma migrate deploy`.
 - [ ] Log shipping and alerts on 5xx and on `auth.refresh_token_reuse` audit entries.
@@ -129,10 +131,11 @@ to start in production if its keys are missing.
 - **Live updates:** WebSockets (or push-triggered refresh) for chat and badges instead of polling.
 
 ### Phase 5 — trust and operations
-- Ratings and reviews after completed rides (the DTOs already carry `ratingAverage`).
-- Driver verification workflow and document review.
-- Report and block users; SOS / share live trip.
-- Admin dashboard (`apps/admin`, Next.js): users, rides, bookings, reports, verification queue, audit log.
+- **Done (5A):** ratings, reports, blocking, safety screen, admin console (overview, users, suspension,
+  rides, reports, audit log).
+- **Next (5B):** driver verification (ID, licence, car papers — needs file storage), verification queue
+  in the console, SOS and live trip sharing with trusted contacts (needs SMS/WhatsApp and maps), staff
+  management screen (create and disable admins), strike system and fraud signals.
 
 ### Phase 6 — quality and release
 - Mobile component and end-to-end tests; load tests on search and booking.

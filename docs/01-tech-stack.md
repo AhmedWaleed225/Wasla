@@ -98,6 +98,19 @@ Node 22.13+ requirement.
 date and time choosers are built from plain components (`DayChips`, `TimeChooser`), and places are
 picked from the landmark list. Maps need a provider key (Phase 4B).
 
+## Admin console (`apps/admin`)
+
+| Technology | Version | Used for |
+|---|---|---|
+| **Vite** + `@vitejs/plugin-react` | 6 / 4 | Dev server (port 3000, proxies `/v1` to the API) and production build |
+| **React** + **react-dom** | 19.3 | UI |
+| **TanStack Query** | 5 | Data fetching and cache |
+
+**Why Vite rather than Next.js (the earlier plan)?** The console is an internal tool behind a sign-in:
+it needs no server-side rendering or SEO. A static single-page app is smaller, has fewer moving parts,
+and can be served from the same domain as the API so its session cookie stays first-party. Details in
+[Admin console](12-admin-console.md).
+
 ## Shared package (`packages/shared`)
 
 Compiled to CommonJS in `dist/` and imported as `@wasla/shared` by both apps.

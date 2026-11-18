@@ -65,13 +65,19 @@ group that doesn't appear in the URL, and `_layout.tsx` wraps its siblings. Path
 | `saved-places.tsx` | `SavedPlaces` | Home, Work, other places; set, replace, remove |
 | `edit-profile.tsx` | `EditProfile` | Name, bio, preferences |
 | `settings.tsx` | `Settings` | Language (saves on the server first so push follows it, then may reload), privacy toggles, log out |
+| `rate/[bookingId].tsx` | `Rate` (+ `Stars`) | Five tappable stars, role-appropriate tags (max 4), optional staff-only comment; shows your existing rating, or why rating isn't open |
+| `report.tsx` | `Report` | Params `bookingId`, `userId`, `name`. Tap-to-call police (122), reason list, details, "also block" toggle; confirmation screen |
+| `safety.tsx` | `Safety` | Emergency numbers (122 police, 123 ambulance) with call buttons, how to report, safety tips, link to blocked people |
+| `blocked-users.tsx` | `BlockedUsers` | People you blocked, with unblock (confirmation) |
 | `vehicles/index.tsx` | `Vehicles` | The driver's cars; add button |
 | `vehicles/edit.tsx` | `EditVehicle` | Add (no `id`) or edit a car: make, model, colour, year, seats stepper, plate letters and numbers; per-field errors from the API; remove with confirmation |
 
 #### Inside `rides/[id].tsx`
 
 - **`useRefreshLists()`** — invalidates `bookings`, `rides` and `me` queries after any change.
-- **`openChat(bookingId)`**, **`confirm(title, body, yes, no, onYes)`** (native alert for destructive actions).
+- **`openChat(bookingId)`**, **`openRate(bookingId)`**, **`openReport(bookingId, userId, name)`**,
+  **`confirm(title, body, yes, no, onYes)`** (native alert for destructive actions).
+- **`useReputation()`** — "★ 4.6 (12) · Trips: 30" or "New on Wasla" for the driver card.
 - **`PassengerPanel`** —
   - With an active booking: status, explanation (for pending: until when the driver can answer), seats
     and total, pickup note, cash notice, **Message** and **Cancel booking**.

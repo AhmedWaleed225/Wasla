@@ -1,5 +1,11 @@
 import type {
+  BlockedUserDto,
   BookingDto,
+  CreateRatingInput,
+  CreateReportInput,
+  RatingDto,
+  RatingStatusDto,
+  ReportDto,
   ConversationDto,
   MessageDto,
   MessagePageDto,
@@ -94,4 +100,13 @@ export const chatApi = {
     api<MessagePageDto>(`/bookings/${bookingId}/messages`, { query: page }),
   send: (bookingId: string, body: string) => api<MessageDto>(`/bookings/${bookingId}/messages`, { method: 'POST', body: { body } }),
   markRead: (bookingId: string) => api<void>(`/bookings/${bookingId}/messages/read`, { method: 'POST' }),
+};
+
+export const trustApi = {
+  ratingStatus: (bookingId: string) => api<RatingStatusDto>(`/bookings/${bookingId}/rating`),
+  rate: (bookingId: string, input: CreateRatingInput) => api<RatingDto>(`/bookings/${bookingId}/rating`, { method: 'POST', body: input }),
+  report: (input: CreateReportInput) => api<ReportDto>('/reports', { method: 'POST', body: input }),
+  blocked: () => api<BlockedUserDto[]>('/me/blocks'),
+  block: (userId: string) => api<void>('/me/blocks', { method: 'POST', body: { userId } }),
+  unblock: (userId: string) => api<void>(`/me/blocks/${userId}`, { method: 'DELETE' }),
 };

@@ -7,7 +7,7 @@ import { ActivityIndicator, FlatList, Pressable, TextInput, View } from 'react-n
 import { chatApi } from '../../src/api/endpoints';
 import { Icon } from '../../src/components/Icon';
 import { Screen } from '../../src/components/Screen';
-import { Button, Notice, T } from '../../src/components/ui';
+import { Button, IconButton, Notice, T } from '../../src/components/ui';
 import { useFormat } from '../../src/format';
 import { colors, fonts, radius, space } from '../../src/theme';
 
@@ -85,7 +85,21 @@ export default function Chat() {
   const canSend = open && draft.trim().length > 0 && !send.isPending;
 
   return (
-    <Screen title={conv?.other.displayName ?? t('chat.title')} back scroll={false} contentStyle={{ paddingBottom: 0 }}>
+    <Screen
+      title={conv?.other.displayName ?? t('chat.title')}
+      back
+      scroll={false}
+      contentStyle={{ paddingBottom: 0 }}
+      right={
+        conv ? (
+          <IconButton
+            icon="flag"
+            label={t('report.title')}
+            onPress={() => router.push({ pathname: '/report', params: { bookingId, userId: conv.other.id, name: conv.other.displayName } })}
+          />
+        ) : undefined
+      }
+    >
       {conv ? (
         <Pressable onPress={() => router.push({ pathname: '/rides/[id]', params: { id: conv.ride.id } })} accessibilityRole="link">
           <T variant="caption" muted style={{ textAlign: 'center' }} numberOfLines={1}>

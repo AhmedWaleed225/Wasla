@@ -166,3 +166,33 @@ used Git Credential Manager's browser sign-in, and the PR was opened from the Gi
 ### Line-ending warnings
 Git warned "LF will be replaced by CRLF" on Windows. Fixed with a `.gitattributes`
 (`* text=auto eol=lf`) so every machine commits the same line endings.
+
+## Phase 5
+
+### Scripted edits silently missing on Windows line endings
+**Problem:** Some files had CRLF line endings on disk. Find-and-replace scripts that searched for text
+containing `\n` didn't match, so a change (registering `AdminModule` in `app.module.ts`) was silently
+skipped. The admin tests caught it with 404s on every admin route. One script also duplicated part of the
+seed file because of the same mismatch; it was restored from git. **Resolution:** Edits now use exact
+replacements that fail loudly when the text isn't found, scripts normalise line endings first, and
+`.gitattributes` keeps the repository on LF.
+
+### Suspended users saw "please log in again"
+**Problem:** Suspending a user also revokes their sessions, and the auth guard checked revocation first,
+so the app showed a generic sign-in error instead of "account suspended". Caught by an admin test.
+**Resolution:** The guard reports suspension before revocation.
+
+### Using the shared package in the browser
+**Problem:** `@wasla/shared` is compiled to CommonJS for Node, which Vite doesn't load directly from a
+linked workspace package. **Resolution:** The admin app aliases `@wasla/shared` to the package's
+TypeScript source in `vite.config.ts`.
+
+### Inline shell scripts and the safety checker
+**Problem:** A long inline shell command with heredocs couldn't be parsed by the command safety check,
+and another inline Node script was mangled by shell quoting. **Resolution:** Larger edits are written to
+a script file first and run from there.
+
+### Admin console sessions: cookie vs. browser storage
+**Decision:** A token in `localStorage` can be read by any script that ends up running on the page. The
+console uses an HttpOnly, SameSite=Strict, path-scoped cookie instead, plus a CSRF header on every change,
+and is served from the same origin as the API (Vite proxy in development).

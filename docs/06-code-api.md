@@ -317,6 +317,70 @@ Controllers above; providers `VehiclesService`, `RidesService`, `BookingsService
 - **`HealthController.health()`** — `@Public()`; runs `SELECT 1` and reports `{ status, database }`.
 - **`HealthModule`**.
 
+## `src/trust/` — ratings, reports, blocks
+
+### `block-check.ts`
+- **`isBlockedEither(db, a, b)`** — true if either blocked the other.
+- **`blockedSet(db, userId)`** — everyone on either side of a block with this user.
+- **`notBlockedSql(viewerId, otherColumn)`** — SQL condition used by ride search.
+
+### `trust.service.ts`
+- **`toRatingDto(r)`**.
+- **`TrustService`**:
+  - **`parties(viewerId, bookingId)`** (private) — the booking's two people; 404 for anyone else.
+  - **`ratingStatus(viewerId, bookingId)`** — ratee, `canRate`, deadline, existing rating.
+  - **`rate(viewerId, bookingId, input)`** — checks completion, window, tags; inserts and audits;
+    duplicate → `RATING_ALREADY_EXISTS`.
+  - **`report(reporterId, input)`** — checks the pair shared the booking and the daily cap; inserts and
+    audits; duplicate open report → `REPORT_ALREADY_OPEN`; optionally blocks.
+  - **`myReports(reporterId)`**.
+  - **`block(blockerId, blockedId)`** — idempotent; audits; calls `BookingsService.cancelForBlock`.
+  - **`unblock(blockerId, blockedId)`**, **`blocked(blockerId)`**.
+
+### `trust.controller.ts`
+**`TrustController`** (routes above) and **`TrustModule`** (imports `RidesModule`).
+
+## `src/admin/` — staff console API
+
+### `password.ts`
+- **`hashPassword(password)`** → `scrypt$<salt>$<hash>`; **`verifyPassword(password, stored)`**
+  (constant time); **`DUMMY_HASH`** (checked for unknown emails); **`ADMIN_PASSWORD_MIN_LENGTH`** = 12.
+
+### `cookies.ts`
+- **`readCookie(header, name)`**, **`sessionCookie(token, maxAge, secure)`** (HttpOnly,
+  SameSite=Strict, Path=/v1/admin), **`clearedCookie(secure)`**.
+
+### `admin-auth.service.ts`
+- **`login(email, password, meta)`** — lockout logic, session creation, audit.
+- **`fromToken(token)`** — the live session and admin, or null.
+- **`logout(sessionId, adminId, meta)`**.
+
+### `admin.guard.ts`
+- **`@AdminPerm(permission)`**, **`@CurrentAdmin()`**, **`checkCsrf(req)`**.
+- **`AdminGuard`** — CSRF header, session cookie, role permission; sets `req.admin`.
+
+### `admin.service.ts`
+- **`overview()`** — counts with Cairo-day boundaries and a 7-day series.
+- **`users(admin, q)`**, **`user(admin, id)`** (audits contact views), **`suspend`**, **`reinstate`**.
+- **`ridesList(q)`**, **`ride(id)`**, **`cancelRide(admin, id, reason)`**.
+- **`reports(q)`** (`urgent` filter), **`report(admin, id)`** (chat for allowed roles, audited),
+  **`updateReport(admin, id, input)`**.
+- **`auditLog(q)`**.
+
+### `admin.controller.ts`
+**`AdminAuthController`** (`/admin/auth`), **`AdminController`** (`/admin`), **`AdminModule`**.
+Both controllers are `@Public()` for the app's user guard and protected by `AdminGuard` instead.
+
+## Changes to existing files in Phase 5
+
+- `rides/ride-mapper.ts`: **`userStats(prisma, ids)`** replaces `completedCounts` and also returns
+  rating count and average (hidden below 3); **`toPublicUser(user, stats)`** takes those stats.
+- `rides/bookings.service.ts`: booking refuses blocked pairs; **`cancelForBlock(blockerId, otherId)`**.
+- `rides/rides.service.ts`: search and details respect blocks.
+- `chat/chat.service.ts`: chat closed between blocked people.
+- `auth/auth.guard.ts`: suspension is reported before session revocation.
+- `main.ts`: CORS allows credentials for listed origins only.
+
 ## `prisma/`
 
 ### `schema.prisma`
@@ -341,4 +405,4 @@ All models and enums ([database](03-database.md)).
 | `setup-env.ts` | Test environment variables (test database, fixed OTP `123456`, test secrets) |
 | `global-setup.ts` | Migrate, wipe and seed `wasla_test` (refuses non-`_test` names) |
 | `helpers.ts` | `createApp(overrides?)`, `freshPhone()`, `login()`, `loginWithProfile()`, `randomPlate()`, `bearer()`, `makeDriver()`, `publishRide()` |
-| `auth.e2e-spec.ts`, `users.e2e-spec.ts`, `locations.e2e-spec.ts`, `rides.e2e-spec.ts`, `messaging.e2e-spec.ts` | End-to-end suites |
+| `auth.e2e-spec.ts`, `users.e2e-spec.ts`, `locations.e2e-spec.ts`, `rides.e2e-spec.ts`, `messaging.e2e-spec.ts`, `trust.e2e-spec.ts`, `admin.e2e-spec.ts` | End-to-end suites |

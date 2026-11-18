@@ -140,6 +140,40 @@ Every one of these writes an audit entry and notifies the other side in the same
 | Driver completed ride | Confirmed passengers | `RIDE_COMPLETED` |
 | New chat message | The other person | Push only (shown in the Messages tab, not the inbox) |
 
+## Ratings
+
+- After a trip is **completed**, the passenger rates the driver and the driver rates the passenger:
+  1–5 stars, up to 4 tags, optional comment.
+- Once per person per trip, within **14 days** of completion.
+- Driving tags (safe driving, clean car, unsafe driving) only apply when rating a driver.
+- An **average is shown only once someone has 3 ratings**, so a single rating can't be traced to the
+  one passenger who left it. The count is always shown.
+- Comments are visible to staff only, in the admin console.
+
+## Reports
+
+- You can only report someone you shared a booking with (either side), so reports can't be used to
+  harass strangers.
+- One open report per person per trip; up to 10 reports a day.
+- Safety and harassment reports are flagged **urgent** and listed first for staff.
+- The report screen shows the police number (122) for emergencies.
+- Staff can read the trip's chat when handling a report; every such view is audited.
+
+## Blocking
+
+- Either person blocking the other hides each other's rides, prevents booking, closes chat between them,
+  and cancels active bookings between them on rides that haven't left.
+- Neither side is ever told they were blocked: messages are neutral ("ride not available", "your booking
+  ended").
+- `GET /me/blocks` lists only the people you blocked, never who blocked you.
+
+## Suspension
+
+- Staff (Operations, Super admin) can suspend with a written reason. The user is signed out everywhere,
+  their upcoming rides are cancelled (passengers notified) and their active bookings cancelled.
+- A suspended user gets "This account is suspended" (403), not a generic "log in again", so they know to
+  contact support. Reinstating restores access.
+
 ## Security measures
 
 | Area | Measure |
@@ -156,14 +190,13 @@ Every one of these writes an audit entry and notifies the other side in the same
 | Logging | pino with redaction of `Authorization`, cookies, OTP codes, refresh tokens and all response bodies |
 | Audit | Append-only `audit_logs` for role changes, publishing, every booking state change, token reuse |
 | SQL injection | Prisma parameters everywhere, including raw SQL (tagged templates) |
-| Admin passwords | scrypt with a random salt (seed only so far) |
+| Admin console | Separate staff accounts; scrypt passwords; lockout after 5 failures; HttpOnly, SameSite=Strict, path-scoped session cookie; CSRF header on every change; per-route role permissions checked on every request; contact details masked by role; every action audited. See [Admin console](12-admin-console.md) |
 | Women-only rides | Enforced in search, booking and publishing, not only hidden in the UI |
 
 ## Known gaps (tracked for later phases)
 
 - **No driver verification** (ID, licence, car papers). Anyone with driver mode on can publish. Must be
   in place before public launch (Phase 5).
-- **No ratings, reporting or blocking** yet (Phase 5).
 - **Rate limits are per API instance** (in memory). They move to Redis before running more than one
   instance.
 - **No account deletion or data export** yet (needed for privacy compliance).

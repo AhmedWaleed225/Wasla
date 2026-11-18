@@ -9,6 +9,7 @@ Wasla/
 │   │   ├── prisma/           schema, migrations, seed
 │   │   ├── src/              modules (see below)
 │   │   └── test/             end-to-end tests
+│   ├── admin/                staff console (Vite + React)
 │   └── mobile/               Expo app
 │       ├── app/              screens — the folder structure IS the navigation
 │       └── src/              API client, components, hooks, stores, formatting
@@ -34,10 +35,14 @@ flowchart TB
   AppModule --> LocationsModule
   AppModule --> RidesModule["RidesModule<br/>Vehicles · Rides · Bookings · BookingExpiry"]
   AppModule --> ChatModule
+  AppModule --> TrustModule["TrustModule<br/>ratings · reports · blocks"]
+  AppModule --> AdminModule["AdminModule<br/>own sign-in · AdminGuard · permissions"]
   AppModule --> NotificationsModule["NotificationsModule (controller)"]
   AppModule --> HealthModule
   RidesModule -.uses.-> NotificationsCoreModule
   ChatModule -.uses.-> NotificationsCoreModule
+  TrustModule -.uses.-> RidesModule
+  AdminModule -.uses.-> RidesModule & AuthModule
   AuthModule -.uses.-> UsersModule
 ```
 
@@ -220,3 +225,22 @@ back the booking.
 requests past `expires_at`, and for each one locks the ride, re-checks the booking is still pending,
 marks it `EXPIRED`, returns the seats and notifies the passenger. Running it on several instances at
 once is safe because of the lock and re-check.
+
+## Blocking
+
+Blocks are checked by plain functions in `src/trust/block-check.ts` (`isBlockedEither`, `blockedSet`,
+`notBlockedSql`) rather than an injected service, so rides, bookings and chat can use them without a
+circular module dependency. Once either person blocks the other:
+
+| Place | Effect |
+|---|---|
+| Search | The other person's rides are filtered out in SQL |
+| Ride details | 404, unless there is already a booking between them |
+| Booking | Refused with the neutral `RIDE_NOT_AVAILABLE` |
+| Chat | Readable, but closed for sending |
+| Existing bookings | Active bookings between them on rides that haven't left are cancelled, seats returned, the other side told their booking ended (never that they were blocked) |
+
+## Admin console
+
+A separate staff app (`apps/admin`) with its own accounts, cookie session, CSRF header and role
+permissions. See [Admin console](12-admin-console.md) for the full flow.
