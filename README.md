@@ -236,4 +236,4 @@ All enforced by the API; the numbers live in `packages/shared/src/rides.ts`.
   re-checked under a lock), but a dedicated job runner is better at scale.
 - Mobile date and time pickers are built in-app (no native picker) so the app runs in Expo Go.
 - **Changing language reloads the app.** React Native only applies a new layout direction on restart.
-- No mobile UI tests yet (planned for Phase 6).
+- No mobile UI tests yet (planned for Phase 6). CI (`.github/workflows/ci.yml`) runs typechecks, all API and shared tests, and the Android bundle on every pull request.

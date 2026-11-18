@@ -8,6 +8,10 @@
 | Typechecks | tsc | — | No | `pnpm typecheck` (or per package `npx tsc --noEmit`) |
 | Android production bundle | `expo export` | — | No | `cd apps/mobile && npx expo export --platform android` |
 
+**CI:** `.github/workflows/ci.yml` runs all of the above on every pull request and every push to
+`main`: typechecks, shared and API unit tests, API end-to-end tests against a `postgis/postgis:16-3.4`
+service, the API production build, and (in a parallel job) the Android bundle.
+
 ## How end-to-end tests work
 
 - They start the **real** Nest application in-process (`createApp()` in `test/helpers.ts`, which uses the

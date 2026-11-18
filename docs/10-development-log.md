@@ -159,9 +159,10 @@ replaced with exact checks (push bodies `['one','two']`, Arabic title text) befo
 ## Repository
 
 ### Empty GitHub repository and no GitHub CLI
-The remote had no branches, and `gh` isn't installed on the development machine. See the PR description
-for how the branch was published.
+The remote had no branches, and `gh` isn't installed on the development machine. `main` was created
+from an empty "Initial commit" and the work replayed on top so a pull request was possible; the push
+used Git Credential Manager's browser sign-in, and the PR was opened from the GitHub website.
 
 ### Line-ending warnings
-Git warns "LF will be replaced by CRLF" on Windows. Harmless, but a `.gitattributes` with
-`* text=auto eol=lf` is recommended so every machine commits the same line endings.
+Git warned "LF will be replaced by CRLF" on Windows. Fixed with a `.gitattributes`
+(`* text=auto eol=lf`) so every machine commits the same line endings.

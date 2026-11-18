@@ -112,7 +112,7 @@ to start in production if its keys are missing.
 - [ ] Log shipping and alerts on 5xx and on `auth.refresh_token_reuse` audit entries.
 - [ ] Account deletion and data export for privacy compliance.
 - [ ] Price-cap constants confirmed by the business.
-- [ ] CI pipeline: install, typecheck, unit tests, e2e tests against a PostgreSQL service, Android bundle.
+- [x] CI pipeline: install, typecheck, unit tests, e2e tests against a PostgreSQL service, Android bundle (`.github/workflows/ci.yml`).
 
 ## Roadmap
 
@@ -140,7 +140,6 @@ to start in production if its keys are missing.
 - Store builds with EAS, release process, monitoring.
 
 ### Smaller improvements noted along the way
-- `.gitattributes` to fix line endings.
 - Pagination for ride search beyond 50 results.
 - Intermediate stops on rides.
 - Move from the custom distance function to PostGIS geography columns when maps arrive.
