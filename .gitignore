@@ -23,3 +23,6 @@ apps/mobile/android/
 *.mobileprovision
 web-build/
 expo-env.d.ts
+
+# CI bundle check output
+apps/mobile/dist-ci/
