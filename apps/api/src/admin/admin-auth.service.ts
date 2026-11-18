@@ -3,10 +3,10 @@ import type { AdminUser } from '@prisma/client';
 import type { AdminMeDto } from '@wasla/shared';
 import { createHash, randomBytes } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
-import { AppException, unauthorized } from '../common/app-exception';
+import { AppException, badRequest, unauthorized } from '../common/app-exception';
 import type { RequestMeta } from '../common/request-meta';
 import { PrismaService } from '../prisma/prisma.service';
-import { DUMMY_HASH, verifyPassword } from './password';
+import { ADMIN_PASSWORD_MIN_LENGTH, DUMMY_HASH, hashPassword, verifyPassword } from './password';
 
 export const ADMIN_SESSION_HOURS = 8;
 export const ADMIN_MAX_FAILED_LOGINS = 5;
@@ -14,7 +14,13 @@ export const ADMIN_LOCK_MINUTES = 15;
 
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 
-export const toAdminMe = (a: AdminUser): AdminMeDto => ({ id: a.id, email: a.email, name: a.name, role: a.role });
+export const toAdminMe = (a: AdminUser): AdminMeDto => ({
+  id: a.id,
+  email: a.email,
+  name: a.name,
+  role: a.role,
+  mustChangePassword: a.mustChangePassword,
+});
 
 @Injectable()
 export class AdminAuthService {
@@ -72,6 +78,26 @@ export class AdminAuthService {
     const session = await this.prisma.adminSession.findUnique({ where: { tokenHash: sha256(token) }, include: { admin: true } });
     if (!session || session.revokedAt || session.expiresAt <= new Date() || session.admin.disabledAt) return null;
     return { admin: session.admin, sessionId: session.id };
+  }
+
+  /**
+   * Sets a new password after checking the current one. Signs out every other
+   * session of this admin (this one stays) and clears the "must change" flag.
+   */
+  async changePassword(admin: AdminUser, sessionId: string, current: string, next: string, meta: RequestMeta): Promise<AdminMeDto> {
+    if (!verifyPassword(current, admin.passwordHash)) throw badRequest('ADMIN_WRONG_PASSWORD', { currentPassword: 'ADMIN_WRONG_PASSWORD' });
+    if (next.length < ADMIN_PASSWORD_MIN_LENGTH || next === current) {
+      throw badRequest('ADMIN_PASSWORD_WEAK', { newPassword: 'ADMIN_PASSWORD_WEAK' });
+    }
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.adminUser.update({ where: { id: admin.id }, data: { passwordHash: hashPassword(next), mustChangePassword: false } }),
+      this.prisma.adminSession.updateMany({
+        where: { adminId: admin.id, revokedAt: null, id: { not: sessionId } },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+    await this.audit.record({ actorType: 'ADMIN', actorId: admin.id, action: 'admin.password_changed', entityType: 'admin', entityId: admin.id, ip: meta.ip });
+    return toAdminMe(updated);
   }
 
   async logout(sessionId: string, adminId: string, meta: RequestMeta): Promise<void> {

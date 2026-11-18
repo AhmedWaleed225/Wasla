@@ -10,8 +10,7 @@ cards, tables with status tags. It's a small React single-page app talking to th
 2. Start the API (`pnpm api:dev`) and the console (`pnpm admin:dev`).
 3. Open http://localhost:3000 and sign in.
 
-Other roles are created directly in the database for now (an "add staff" screen is on the roadmap):
-`admin_users` with a password hash from `hashPassword()` in `apps/api/src/admin/password.ts`.
+Further staff accounts are added from the **Staff** page by a super admin (see below).
 
 ## Stack
 
@@ -67,6 +66,7 @@ sequenceDiagram
 | View and handle reports | ✓ | ✓ | ✓ | — |
 | Read a reported trip's chat | ✓ | ✓ | ✓ | — |
 | Audit log | ✓ | ✓ | — | — |
+| Manage staff accounts | ✓ | — | — | — |
 
 Defined once in `ADMIN_PERMISSIONS` (`packages/shared/src/enums.ts`) and used by both the API and the console.
 
@@ -87,6 +87,26 @@ Defined once in `ADMIN_PERMISSIONS` (`packages/shared/src/enums.ts`) and used by
 | `src/pages/Rides.tsx` | **`RidesList`** (search by place, status filter) and **`RideDetail`** (driver, car and plate, seats, bookings, cancel with reason) |
 | `src/pages/Reports.tsx` | **`ReportsList`** (filters including "urgent") and **`ReportDetail`** (details, trip, internal note, start review / resolve / dismiss / reopen, the booking's chat for allowed roles) |
 | `src/pages/Audit.tsx` | **`Audit`** — the append-only log, filter by action prefix and entity type |
+| `src/pages/Staff.tsx` | **`Staff`** (add a staff member, change role, disable/enable, reset password) and **`OneTimePassword`** (shows a temporary password once, with copy) |
+| `src/pages/ChangePassword.tsx` | **`ChangePassword`** — forced full-screen after a temporary password; also reachable from "Change password" in the sidebar |
+
+## Staff accounts
+
+- A **super admin** adds staff (name, work email, role) on the Staff page. The API returns a random
+  24-character **temporary password once**; the console shows it with a copy button and never again.
+  Only its scrypt hash is stored.
+- Someone signed in with a temporary password can only see "who am I", change their password and sign
+  out — every other request returns `ADMIN_PASSWORD_CHANGE_REQUIRED`, and the console shows the
+  change-password screen.
+- Changing a password requires the current one, needs 12+ characters, and signs out the person's other
+  sessions.
+- A super admin can change roles, disable or re-enable accounts (disabling signs them out at once) and
+  reset passwords (new temporary password, account unlocked, all sessions ended).
+- **Nobody can change their own role, disable themselves or reset their own password** from the Staff
+  page, so a super admin can't lock themselves — or the last super admin — out.
+- Every staff change is audited: `admin.staff_created`, `admin.staff_role_changed`,
+  `admin.staff_disabled`, `admin.staff_enabled`, `admin.staff_password_reset`,
+  `admin.password_changed`.
 
 ## Design board sections not built yet
 

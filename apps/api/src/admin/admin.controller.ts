@@ -6,6 +6,14 @@ import {
   adminPageSchema,
   adminReasonSchema,
   adminUpdateReportSchema,
+  adminChangePasswordSchema,
+  adminCreateStaffSchema,
+  adminUpdateStaffSchema,
+  type AdminChangePasswordInput,
+  type AdminCreateStaffInput,
+  type AdminStaffDto,
+  type AdminStaffWithPasswordDto,
+  type AdminUpdateStaffInput,
   type AdminAuditRowDto,
   type AdminLoginInput,
   type AdminMeDto,
@@ -30,7 +38,8 @@ import { ZodPipe } from '../common/zod-validation.pipe';
 import { ENV, type Env } from '../config/env';
 import { RidesModule } from '../rides/rides.module';
 import { ADMIN_SESSION_HOURS, AdminAuthService, toAdminMe } from './admin-auth.service';
-import { AdminGuard, AdminPerm, CurrentAdmin, checkCsrf, type AdminContext } from './admin.guard';
+import { AdminGuard, AdminPerm, AllowBeforePasswordChange, CurrentAdmin, checkCsrf, type AdminContext } from './admin.guard';
+import { StaffService } from './staff.service';
 import { AdminService } from './admin.service';
 import { clearedCookie, sessionCookie } from './cookies';
 
@@ -67,6 +76,7 @@ export class AdminAuthController {
   @Post('logout')
   @HttpCode(204)
   @UseGuards(AdminGuard)
+  @AllowBeforePasswordChange()
   async logout(@CurrentAdmin() ctx: AdminContext, @ReqMeta() meta: RequestMeta, @Res({ passthrough: true }) res: Response): Promise<void> {
     await this.auth.logout(ctx.sessionId, ctx.admin.id, meta);
     res.setHeader('Set-Cookie', clearedCookie(this.env.NODE_ENV === 'production'));
@@ -74,8 +84,23 @@ export class AdminAuthController {
 
   @Get('me')
   @UseGuards(AdminGuard)
+  @AllowBeforePasswordChange()
   me(@CurrentAdmin() ctx: AdminContext): AdminMeDto {
     return toAdminMe(ctx.admin);
+  }
+
+  /** Any admin, for their own account. Required first after a temporary password. */
+  @Post('password')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @UseGuards(AdminGuard)
+  @AllowBeforePasswordChange()
+  changePassword(
+    @CurrentAdmin() ctx: AdminContext,
+    @Body(new ZodPipe(adminChangePasswordSchema)) body: AdminChangePasswordInput,
+    @ReqMeta() meta: RequestMeta,
+  ): Promise<AdminMeDto> {
+    return this.auth.changePassword(ctx.admin, ctx.sessionId, body.currentPassword, body.newPassword, meta);
   }
 }
 
@@ -179,9 +204,45 @@ export class AdminController {
   }
 }
 
+/** Staff accounts. Super admins only. */
+@ApiExcludeController()
+@Public()
+@UseGuards(AdminGuard)
+@AdminPerm('manageStaff')
+@Controller('admin/staff')
+export class StaffController {
+  constructor(private readonly staff: StaffService) {}
+
+  @Get()
+  list(): Promise<AdminStaffDto[]> {
+    return this.staff.list();
+  }
+
+  /** Returns a one-time temporary password to hand to the new staff member securely. */
+  @Post()
+  create(@CurrentAdmin() ctx: AdminContext, @Body(new ZodPipe(adminCreateStaffSchema)) body: AdminCreateStaffInput): Promise<AdminStaffWithPasswordDto> {
+    return this.staff.create(ctx.admin, body);
+  }
+
+  @Patch(':id')
+  update(
+    @CurrentAdmin() ctx: AdminContext,
+    @Param('id', uuid) id: string,
+    @Body(new ZodPipe(adminUpdateStaffSchema)) body: AdminUpdateStaffInput,
+  ): Promise<AdminStaffDto> {
+    return this.staff.update(ctx.admin, id, body);
+  }
+
+  @Post(':id/reset-password')
+  @HttpCode(200)
+  resetPassword(@CurrentAdmin() ctx: AdminContext, @Param('id', uuid) id: string): Promise<AdminStaffWithPasswordDto> {
+    return this.staff.resetPassword(ctx.admin, id);
+  }
+}
+
 @Module({
   imports: [AuthModule, RidesModule],
-  controllers: [AdminAuthController, AdminController],
-  providers: [AdminAuthService, AdminService, AdminGuard],
+  controllers: [AdminAuthController, AdminController, StaffController],
+  providers: [AdminAuthService, AdminService, StaffService, AdminGuard],
 })
 export class AdminModule {}

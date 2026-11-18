@@ -353,11 +353,14 @@ Controllers above; providers `VehiclesService`, `RidesService`, `BookingsService
 ### `admin-auth.service.ts`
 - **`login(email, password, meta)`** — lockout logic, session creation, audit.
 - **`fromToken(token)`** — the live session and admin, or null.
+- **`changePassword(admin, sessionId, current, next, meta)`** — checks the current password, stores the
+  new hash, clears the temporary flag, ends the admin's other sessions.
 - **`logout(sessionId, adminId, meta)`**.
 
 ### `admin.guard.ts`
 - **`@AdminPerm(permission)`**, **`@CurrentAdmin()`**, **`checkCsrf(req)`**.
-- **`AdminGuard`** — CSRF header, session cookie, role permission; sets `req.admin`.
+- **`@AllowBeforePasswordChange()`** — marks the routes usable with a temporary password.
+- **`AdminGuard`** — CSRF header, session cookie, temporary-password lock, role permission; sets `req.admin`.
 
 ### `admin.service.ts`
 - **`overview()`** — counts with Cairo-day boundaries and a 7-day series.
@@ -367,8 +370,14 @@ Controllers above; providers `VehiclesService`, `RidesService`, `BookingsService
   **`updateReport(admin, id, input)`**.
 - **`auditLog(q)`**.
 
+### `staff.service.ts`
+- **`StaffService`** — **`list()`**, **`create(actor, input)`** (temporary password returned once),
+  **`update(actor, id, { role?, disabled? })`** (disabling ends sessions), **`resetPassword(actor, id)`**.
+  All refuse to act on the caller's own account and are audited.
+
 ### `admin.controller.ts`
-**`AdminAuthController`** (`/admin/auth`), **`AdminController`** (`/admin`), **`AdminModule`**.
+**`AdminAuthController`** (`/admin/auth`, including `POST password`), **`AdminController`** (`/admin`),
+**`StaffController`** (`/admin/staff`, `manageStaff`), **`AdminModule`**.
 Both controllers are `@Public()` for the app's user guard and protected by `AdminGuard` instead.
 
 ## Changes to existing files in Phase 5

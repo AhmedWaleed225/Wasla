@@ -14,6 +14,9 @@ export interface AdminContext {
 type AdminRequest = Request & { admin?: AdminContext };
 
 const PERMISSION = 'adminPermission';
+const ALLOW_BEFORE_PASSWORD_CHANGE = 'adminAllowBeforePasswordChange';
+/** Routes usable before a temporary password is replaced: who am I, change password, sign out. */
+export const AllowBeforePasswordChange = () => SetMetadata(ALLOW_BEFORE_PASSWORD_CHANGE, true);
 /** The permission (from ADMIN_PERMISSIONS in the shared package) a route needs. */
 export const AdminPerm = (p: AdminPermission) => SetMetadata(PERMISSION, p);
 
@@ -48,6 +51,9 @@ export class AdminGuard implements CanActivate {
     checkCsrf(req);
     const found = await this.auth.fromToken(readCookie(req.headers.cookie, ADMIN_COOKIE));
     if (!found) throw unauthorized('ADMIN_UNAUTHENTICATED');
+    // A temporary password (new account or reset) must be replaced before anything else.
+    const allowed = this.reflector.getAllAndOverride<boolean | undefined>(ALLOW_BEFORE_PASSWORD_CHANGE, [ctx.getHandler(), ctx.getClass()]);
+    if (found.admin.mustChangePassword && !allowed) throw forbidden('ADMIN_PASSWORD_CHANGE_REQUIRED');
     const needed = this.reflector.getAllAndOverride<AdminPermission | undefined>(PERMISSION, [ctx.getHandler(), ctx.getClass()]);
     if (needed && !adminCan(found.admin.role, needed)) throw forbidden('ADMIN_FORBIDDEN');
     req.admin = found;

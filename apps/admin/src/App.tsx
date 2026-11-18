@@ -3,6 +3,8 @@ import { adminCan, type AdminMeDto, type AdminPermission } from '@wasla/shared';
 import { useEffect, type ReactElement } from 'react';
 import { adminApi, setSignedOutHandler } from './api';
 import { Audit } from './pages/Audit';
+import { ChangePassword } from './pages/ChangePassword';
+import { Staff } from './pages/Staff';
 import { Login } from './pages/Login';
 import { Overview } from './pages/Overview';
 import { ReportDetail, ReportsList } from './pages/Reports';
@@ -16,6 +18,7 @@ const NAV: { path: string; label: string; icon: Parameters<typeof Icon>[0]['name
   { path: 'rides', label: 'Rides', icon: 'route', perm: 'viewRides' },
   { path: 'reports', label: 'Complaints & reports', icon: 'flag', perm: 'viewReports' },
   { path: 'audit', label: 'Audit log', icon: 'list', perm: 'viewAudit' },
+  { path: 'staff', label: 'Staff', icon: 'user', perm: 'manageStaff' },
 ];
 
 export function App() {
@@ -30,6 +33,10 @@ export function App() {
   if (me.isPending) return <p className="m" style={{ padding: 24 }}>Loading…</p>;
   if (!me.data) return <Login onSignedIn={(m) => qc.setQueryData(['me'], m)} />;
   const admin: AdminMeDto = me.data;
+  const setMe = (m: AdminMeDto) => qc.setQueryData(['me'], m);
+
+  // A temporary password has to be replaced before anything else (the API enforces this too).
+  if (admin.mustChangePassword) return <ChangePassword me={admin} forced onChanged={setMe} />;
 
   const signOut = async () => {
     try {
@@ -50,6 +57,8 @@ export function App() {
   else if (section === 'rides') page = id ? <RideDetail id={id} me={admin} /> : <RidesList />;
   else if (section === 'reports') page = id ? <ReportDetail id={id} me={admin} /> : <ReportsList />;
   else if (section === 'audit') page = <Audit />;
+  else if (section === 'staff') page = <Staff me={admin} />;
+  else if (section === 'password') page = <ChangePassword me={admin} forced={false} onChanged={setMe} />;
   else page = <Overview me={admin} />;
 
   return (
@@ -73,6 +82,9 @@ export function App() {
             <br />
             <span className="small">{titleCase(admin.role)}</span>
           </span>
+          <a href="#/password" className="small" style={{ color: 'var(--rail)' }}>
+            Change password
+          </a>
           <button className="bt" type="button" onClick={() => void signOut()}>
             Sign out
           </button>

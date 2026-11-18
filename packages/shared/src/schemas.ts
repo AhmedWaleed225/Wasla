@@ -389,3 +389,30 @@ export const blockUserSchema = z.object({
   userId: z.string().uuid(),
 });
 export type BlockUserInput = z.infer<typeof blockUserSchema>;
+
+// ---------- Staff management ----------
+
+const ADMIN_ROLES = ['SUPER_ADMIN', 'OPERATIONS', 'SUPPORT', 'FINANCE'] as const;
+
+export const adminCreateStaffSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+  name: z.string().trim().min(2).max(80),
+  role: z.enum(ADMIN_ROLES),
+});
+export type AdminCreateStaffInput = z.infer<typeof adminCreateStaffSchema>;
+
+export const adminUpdateStaffSchema = z
+  .object({
+    role: z.enum(ADMIN_ROLES).optional(),
+    disabled: z.boolean().optional(),
+  })
+  .refine((v) => v.role !== undefined || v.disabled !== undefined, 'VALIDATION_EMPTY_UPDATE');
+export type AdminUpdateStaffInput = z.infer<typeof adminUpdateStaffSchema>;
+
+export const adminChangePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'ADMIN_WRONG_PASSWORD').max(200),
+    newPassword: z.string().min(12, 'ADMIN_PASSWORD_WEAK').max(200, 'ADMIN_PASSWORD_WEAK'),
+  })
+  .refine((v) => v.currentPassword !== v.newPassword, { message: 'ADMIN_PASSWORD_WEAK', path: ['newPassword'] });
+export type AdminChangePasswordInput = z.infer<typeof adminChangePasswordSchema>;

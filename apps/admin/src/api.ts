@@ -1,4 +1,8 @@
 import type {
+  AdminCreateStaffInput,
+  AdminStaffDto,
+  AdminStaffWithPasswordDto,
+  AdminUpdateStaffInput,
   AdminAuditRowDto,
   AdminMeDto,
   AdminOverviewDto,
@@ -88,4 +92,10 @@ export const adminApi = {
   report: (id: string) => call<AdminReportDetailDto>('GET', `/admin/reports/${id}`),
   updateReport: (id: string, input: AdminUpdateReportInput) => call<AdminReportDetailDto>('PATCH', `/admin/reports/${id}`, input),
   audit: (p: Page) => call<Paged<AdminAuditRowDto>>('GET', '/admin/audit', undefined, p),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    call<AdminMeDto>('POST', '/admin/auth/password', { currentPassword, newPassword }),
+  staff: () => call<AdminStaffDto[]>('GET', '/admin/staff'),
+  createStaff: (input: AdminCreateStaffInput) => call<AdminStaffWithPasswordDto>('POST', '/admin/staff', input),
+  updateStaff: (id: string, input: AdminUpdateStaffInput) => call<AdminStaffDto>('PATCH', `/admin/staff/${id}`, input),
+  resetStaffPassword: (id: string) => call<AdminStaffWithPasswordDto>('POST', `/admin/staff/${id}/reset-password`),
 };

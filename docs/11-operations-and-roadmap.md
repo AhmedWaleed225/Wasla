@@ -50,6 +50,7 @@ Set `OTP_MOCK_FIXED_CODE=123456` in `.env` for a fixed code.
 | `pnpm api:dev` | API in watch mode on port 4000 |
 | `pnpm mobile:dev` | Expo dev server |
 | `pnpm admin:dev` | Admin console on http://localhost:3000 (proxies `/v1` to the API) |
+| `pnpm mobile:web` | The mobile app in a browser (Node 22.13+; see the README for Node 20) |
 
 ## API environment variables (`apps/api/.env`)
 
@@ -135,7 +136,8 @@ to start in production if its keys are missing.
   rides, reports, audit log).
 - **Next (5B):** driver verification (ID, licence, car papers — needs file storage), verification queue
   in the console, SOS and live trip sharing with trusted contacts (needs SMS/WhatsApp and maps), staff
-  management screen (create and disable admins), strike system and fraud signals.
+  strike system and fraud signals. **Staff management is done** (add, roles, disable, reset, forced
+  password change).
 
 ### Phase 6 — quality and release
 - Mobile component and end-to-end tests; load tests on search and booking.

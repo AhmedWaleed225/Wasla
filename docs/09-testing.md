@@ -4,7 +4,7 @@
 |---|---|---|---|---|
 | Shared unit tests | Vitest | 27 | No | `pnpm --filter @wasla/shared test` |
 | API unit tests | Jest | 9 | No | `pnpm --filter @wasla/api test:unit` |
-| API end-to-end tests | Jest + Supertest | 58 | Yes (PostgreSQL) | `pnpm --filter @wasla/api test:e2e` |
+| API end-to-end tests | Jest + Supertest | 61 | Yes (PostgreSQL) | `pnpm --filter @wasla/api test:e2e` |
 | Typechecks | tsc | — | No | `pnpm typecheck` (or per package `npx tsc --noEmit`) |
 | Android production bundle | `expo export` | — | No | `cd apps/mobile && npx expo export --platform android` |
 
@@ -107,6 +107,11 @@ fullName?)`, `publishRide(app, prisma, driver, overrides?)`.
 - suspends a driver: signs them out, cancels their rides, tells passengers, and can reinstate
 - works a report: urgent first, chat visible to support and audited, then resolved
 - shows the audit log to operations and ends sessions on logout
+
+### Staff management — `staff.e2e-spec.ts` (3)
+- only super admins manage staff
+- creates staff with a one-time password that must be changed before anything else
+- changes roles, disables (signing out) and resets passwords — never for yourself
 
 The admin console itself was also checked by hand in a browser against the dev database: sign-in,
 overview, users, user detail, audit log.

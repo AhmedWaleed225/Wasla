@@ -36,8 +36,8 @@ The approved design lives in the Wasla design canvas (Claude Design). Design tok
 | Private chat per booking (driver ↔ that passenger), unread counts, "seen" | Done (polling, not live sockets) |
 | Maps, online payments, real SMS, file uploads | Not started — each needs a provider account (Phase 4, part B) |
 | Ratings after trips (average shown from 3), reports, blocking, safety screen | Done |
-| Admin console: overview, users, suspend/reinstate, rides, reports, audit log | Done (`pnpm admin:dev`) |
-| Driver verification, SOS / trip sharing, staff management | Not started (Phase 5B) |
+| Admin console: overview, users, suspend/reinstate, rides, reports, audit log, staff accounts | Done (`pnpm admin:dev`) |
+| Driver verification, SOS / trip sharing | Not started — need file storage, SMS and maps |
 
 See **Known limitations** at the bottom.
 

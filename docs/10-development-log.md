@@ -196,3 +196,24 @@ a script file first and run from there.
 **Decision:** A token in `localStorage` can be read by any script that ends up running on the page. The
 console uses an HttpOnly, SameSite=Strict, path-scoped cookie instead, plus a CSRF header on every change,
 and is served from the same origin as the API (Vite proxy in development).
+
+### Expo's dev server crashes on Node 20
+**Problem:** `expo start --web` died with `TypeError: URL.parse is not a function` — `URL.parse` only
+exists from Node 22. **Workaround:** `expo export --platform web` works on Node 20; serve the output with
+any static server that falls back to `index.html`. The real fix is Node 22.13+.
+
+### SecureStore in the browser
+**Problem:** `expo-secure-store` has no web implementation, and the RTL "reload until the direction is
+right" logic could loop forever in a browser. **Resolution:** `src/secure-storage.ts` uses SecureStore
+on phones and `localStorage` on web (preview only), and on web the page's `dir` attribute is set
+instead of reloading.
+
+### Prisma can't regenerate while the API is running (Windows)
+**Problem:** `prisma generate` failed with `EPERM … rename query_engine-windows.dll.node`. **Cause:** the
+running API holds the engine file open. **Resolution:** stop the API, generate, start it again.
+
+### Vite served an outdated file after rapid edits
+**Problem:** After several quick edits to `App.tsx`, the console crashed with `Staff is not defined`:
+Vite's file watcher on Windows had missed the last change and kept serving an older transform.
+**Resolution:** restart the dev server with `--force`. Typecheck and production build were correct
+throughout.

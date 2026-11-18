@@ -525,6 +525,8 @@ model AdminUser {
   /// Consecutive failed sign-ins; reset on success.
   failedLogins Int       @default(0) @map("failed_logins")
   lockedUntil  DateTime? @map("locked_until")
+  /// Set when an account is created or its password reset by another admin.
+  mustChangePassword Boolean @default(false) @map("must_change_password")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 

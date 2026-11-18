@@ -202,7 +202,8 @@ Partial unique index `reports_one_open_per_booking` on `(reporter_id, booking_id
 ### Administration
 
 **`admin_users`** — staff accounts for the console. `email`, `name`, `password_hash`
-(scrypt), `role`, `disabled_at`, `last_login_at`, `failed_logins`, `locked_until`.
+(scrypt), `role`, `disabled_at`, `last_login_at`, `failed_logins`, `locked_until`,
+`must_change_password` (set for new or reset accounts).
 
 **`admin_sessions`** — `admin_id`, `token_hash` (SHA-256 of the cookie token, unique), `ip`,
 `user_agent`, `expires_at` (8 h), `revoked_at`.
@@ -225,6 +226,7 @@ hint and the server's check agree.
 | `20261117120000_init` | Identity, sessions, OTP, places, saved places, admins, audit log; checks on roles, attempts, coordinates; one Home/Work per user; append-only audit trigger |
 | `20261118100000_rides_bookings` | Vehicles, rides, bookings; seat/price/money checks; one active booking per passenger; active plate uniqueness; `wasla_distance_km`; search index |
 | `20261118140000_messaging_notifications` | Notifications, push devices, messages, chat reads; non-blank and no-edit rules for messages |
+| `20261119100000_admin_staff_management` | `admin_users.must_change_password` |
 | `20261118180000_trust_safety_admin` | Ratings, reports, blocks, admin sessions, admin lockout columns; one open report per trip; no self-rating, -reporting or -blocking |
 
 How they were produced: `prisma migrate diff` generated the table SQL, then the hand-written section

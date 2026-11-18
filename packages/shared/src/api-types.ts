@@ -267,6 +267,25 @@ export interface AdminMeDto {
   email: string;
   name: string;
   role: AdminRole;
+  /** True after an account is created or its password reset: the console asks for a new password first. */
+  mustChangePassword: boolean;
+}
+
+export interface AdminStaffDto {
+  id: string;
+  email: string;
+  name: string;
+  role: AdminRole;
+  disabled: boolean;
+  locked: boolean;
+  mustChangePassword: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+}
+
+/** Returned once when an account is created or its password reset. Never stored in plain text. */
+export interface AdminStaffWithPasswordDto extends AdminStaffDto {
+  temporaryPassword: string;
 }
 
 export interface AdminOverviewDto {

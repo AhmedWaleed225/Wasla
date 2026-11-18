@@ -155,6 +155,14 @@ send `X-Wasla-Admin: 1` (`ADMIN_CSRF` otherwise). Each route needs a permission
 | GET | `/admin/reports/:id` | viewReports | With the trip and (viewReportChat) its chat — audited |
 | PATCH | `/admin/reports/:id` | handleReports | `{ status?, adminNote? }` |
 | GET | `/admin/audit` | viewAudit | `?q=<action prefix>&status=<entity type>&page=` |
+| POST | `/admin/auth/password` | signed in | `{ currentPassword, newPassword (12+) }` → `AdminMeDto`; signs out other sessions. `ADMIN_WRONG_PASSWORD`, `ADMIN_PASSWORD_WEAK` |
+| GET | `/admin/staff` | manageStaff | `AdminStaffDto[]` |
+| POST | `/admin/staff` | manageStaff | `{ email, name, role }` → `AdminStaffWithPasswordDto` (temporary password, once). `ADMIN_EMAIL_TAKEN` |
+| PATCH | `/admin/staff/:id` | manageStaff | `{ role?, disabled? }`. `ADMIN_SELF_CHANGE` for your own account |
+| POST | `/admin/staff/:id/reset-password` | manageStaff | New temporary password; unlocks; ends sessions |
+
+While an account still has a temporary password, every admin route except `/admin/auth/me`,
+`/admin/auth/password` and `/admin/auth/logout` answers `ADMIN_PASSWORD_CHANGE_REQUIRED` (403).
 
 ## Main response shapes
 

@@ -135,6 +135,7 @@ export const ADMIN_PERMISSIONS = {
   handleReports: ['SUPER_ADMIN', 'OPERATIONS', 'SUPPORT'],
   viewReportChat: ['SUPER_ADMIN', 'OPERATIONS', 'SUPPORT'],
   viewAudit: ['SUPER_ADMIN', 'OPERATIONS'],
+  manageStaff: ['SUPER_ADMIN'],
 } as const satisfies Record<string, readonly AdminRole[]>;
 export type AdminPermission = keyof typeof ADMIN_PERMISSIONS;
 
