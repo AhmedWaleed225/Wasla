@@ -1,6 +1,7 @@
 // Wasla database schema.
 // Phase 2: identity, sessions, locations, audit. Phase 3: vehicles, rides, bookings.
-// Phase 4: notifications, push devices, booking chat. Payments and safety come later.
+// Phase 4: notifications, push devices, booking chat.
+// Phase 5: ratings, reports, blocks, admin sessions. Payments come later.
 // Enum values mirror packages/shared/src/enums.ts.
 
 generator client {
@@ -95,6 +96,23 @@ enum NotificationType {
   RIDE_COMPLETED
 }
 
+enum ReportReason {
+  SAFETY
+  HARASSMENT
+  INAPPROPRIATE_MESSAGES
+  NO_SHOW
+  PAYMENT
+  FAKE_PROFILE
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
 enum AdminRole {
   SUPER_ADMIN
   OPERATIONS
@@ -136,6 +154,12 @@ model User {
   pushDevices    PushDevice[]
   messagesSent   Message[]
   chatReads      ChatRead[]
+  ratingsGiven    Rating[] @relation("RatingRater")
+  ratingsReceived Rating[] @relation("RatingRatee")
+  reportsFiled    Report[] @relation("ReportReporter")
+  reportsAgainst  Report[] @relation("ReportReported")
+  blocksMade      Block[]  @relation("BlockBlocker")
+  blockedBy       Block[]  @relation("BlockBlocked")
 
   @@index([status])
   @@map("users")
@@ -352,6 +376,8 @@ model Booking {
   passenger User       @relation(fields: [passengerId], references: [id])
   messages  Message[]
   chatReads ChatRead[]
+  ratings   Rating[]
+  reports   Report[]
 
   @@unique([passengerId, idempotencyKey])
   @@index([rideId, status])
@@ -424,6 +450,68 @@ model ChatRead {
   @@map("chat_reads")
 }
 
+// ---------- Trust & safety ----------
+
+/// One rating per person per completed booking: the passenger rates the driver, the driver rates the passenger.
+model Rating {
+  id        String   @id @default(uuid()) @db.Uuid
+  bookingId String   @map("booking_id") @db.Uuid
+  raterId   String   @map("rater_id") @db.Uuid
+  rateeId   String   @map("ratee_id") @db.Uuid
+  stars     Int
+  tags      String[] @default([])
+  comment   String?  @db.VarChar(280)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  rater   User    @relation("RatingRater", fields: [raterId], references: [id])
+  ratee   User    @relation("RatingRatee", fields: [rateeId], references: [id])
+
+  @@unique([bookingId, raterId])
+  @@index([rateeId, createdAt])
+  @@map("ratings")
+}
+
+/// A complaint about someone the reporter shared a trip with. Handled in the admin console.
+model Report {
+  id             String       @id @default(uuid()) @db.Uuid
+  reporterId     String       @map("reporter_id") @db.Uuid
+  reportedUserId String       @map("reported_user_id") @db.Uuid
+  bookingId      String?      @map("booking_id") @db.Uuid
+  reason         ReportReason
+  details        String?      @db.VarChar(1000)
+  status         ReportStatus @default(OPEN)
+  adminNote      String?      @map("admin_note") @db.VarChar(2000)
+  handledById    String?      @map("handled_by_id") @db.Uuid
+  resolvedAt     DateTime?    @map("resolved_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  reporter  User       @relation("ReportReporter", fields: [reporterId], references: [id])
+  reported  User       @relation("ReportReported", fields: [reportedUserId], references: [id])
+  booking   Booking?   @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  handledBy AdminUser? @relation(fields: [handledById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([reportedUserId])
+  @@index([reporterId, createdAt])
+  @@map("reports")
+}
+
+/// The blocker and the blocked person no longer see or book each other's rides, or chat.
+model Block {
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  blocker User @relation("BlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("blocks")
+}
+
 // ---------- Administration ----------
 
 model AdminUser {
@@ -434,10 +522,33 @@ model AdminUser {
   role         AdminRole
   disabledAt   DateTime? @map("disabled_at")
   lastLoginAt  DateTime? @map("last_login_at")
+  /// Consecutive failed sign-ins; reset on success.
+  failedLogins Int       @default(0) @map("failed_logins")
+  lockedUntil  DateTime? @map("locked_until")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
+  sessions       AdminSession[]
+  reportsHandled Report[]
+
   @@map("admin_users")
+}
+
+/// Console sign-in. The cookie holds a random token; only its SHA-256 is stored.
+model AdminSession {
+  id        String    @id @default(uuid()) @db.Uuid
+  adminId   String    @map("admin_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  ip        String?   @db.VarChar(64)
+  userAgent String?   @map("user_agent") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  admin AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@map("admin_sessions")
 }
 
 /// Append-only record of security- and money-relevant actions.

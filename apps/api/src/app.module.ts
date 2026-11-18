@@ -13,6 +13,8 @@ import { LocationsModule } from './locations/locations.module';
 import { PrismaModule } from './prisma/prisma.service';
 import { RidesModule } from './rides/rides.module';
 import { ChatModule } from './chat/chat.controller';
+import { TrustModule } from './trust/trust.controller';
+import { AdminModule } from './admin/admin.controller';
 import { NotificationsModule } from './notifications/notifications.controller';
 import { NotificationsCoreModule } from './notifications/notifications.service';
 import { UsersModule } from './users/users.module';
@@ -53,6 +55,8 @@ import { UsersModule } from './users/users.module';
     LocationsModule,
     RidesModule,
     ChatModule,
+    TrustModule,
+    AdminModule,
     NotificationsModule,
     HealthModule,
   ],

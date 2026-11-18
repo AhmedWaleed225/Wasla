@@ -3,7 +3,7 @@ import type { User, UserProfile, UserRole } from '@prisma/client';
 import type { CreateProfileInput, MeDto, ProfileDto, UpdateProfileInput } from '@wasla/shared';
 import { badRequest, conflict, forbidden, notFound } from '../common/app-exception';
 import { AuditService } from '../audit/audit.service';
-import { completedCounts } from '../rides/ride-mapper';
+import { EMPTY_STATS, userStats, type UserStats } from '../rides/ride-mapper';
 import { PrismaService } from '../prisma/prisma.service';
 
 export { displayNameOf } from './display-name';
@@ -40,7 +40,7 @@ export class UsersService {
     private readonly audit: AuditService,
   ) {}
 
-  private toMe(user: User & { profile: UserProfile | null }, ridesCompleted: number): MeDto {
+  private toMe(user: User & { profile: UserProfile | null }, stats: UserStats = EMPTY_STATS): MeDto {
     return {
       id: user.id,
       phone: user.phoneE164,
@@ -50,16 +50,15 @@ export class UsersService {
       status: user.status,
       createdAt: user.createdAt.toISOString(),
       profile: user.profile ? toProfileDto(user.profile) : null,
-      // Ratings arrive in Phase 5.
-      stats: { ridesCompleted, ratingAverage: null, ratingCount: 0 },
+      stats: { ridesCompleted: stats.ridesCompleted, ratingAverage: stats.ratingAverage, ratingCount: stats.ratingCount },
     };
   }
 
   async getMe(userId: string): Promise<MeDto> {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { profile: true } });
     if (!user) throw notFound();
-    const counts = await completedCounts(this.prisma, [userId]);
-    return this.toMe(user, counts.get(userId) ?? 0);
+    const counts = await userStats(this.prisma, [userId]);
+    return this.toMe(user, counts.get(userId));
   }
 
   async createProfile(userId: string, input: CreateProfileInput): Promise<MeDto> {

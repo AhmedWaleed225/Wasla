@@ -9,9 +9,9 @@
  * These numbers exist only in local/test databases and never receive SMS
  * while OTP_PROVIDER=mock.
  */
-import { randomBytes, scryptSync } from 'node:crypto';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { distanceKm, priceLimitsEgp } from '@wasla/shared';
+import { ADMIN_PASSWORD_MIN_LENGTH, hashPassword } from '../../src/admin/password';
 import { SEED_PLACES } from './locations';
 
 const prisma = new PrismaClient();
@@ -104,22 +104,20 @@ async function seedUsers(idBySlug: Map<string, string>) {
   }
 }
 
-function hashAdminPassword(password: string): string {
-  const salt = randomBytes(16);
-  const hash = scryptSync(password, salt, 64);
-  return `scrypt$${salt.toString('base64')}$${hash.toString('base64')}`;
-}
-
+/** Creates a SUPER_ADMIN for the console when SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are set. */
 async function seedAdmin() {
-  const email = process.env.SEED_ADMIN_EMAIL;
+  const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.SEED_ADMIN_PASSWORD;
   if (!email || !password) {
     console.log('  admin: skipped (set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD to create one)');
     return;
   }
+  if (password.length < ADMIN_PASSWORD_MIN_LENGTH) {
+    throw new Error(`SEED_ADMIN_PASSWORD must be at least ${ADMIN_PASSWORD_MIN_LENGTH} characters`);
+  }
   await prisma.adminUser.upsert({
     where: { email },
-    create: { email, name: 'Local Admin', role: 'SUPER_ADMIN', passwordHash: hashAdminPassword(password) },
+    create: { email, name: 'Local Admin', role: 'SUPER_ADMIN', passwordHash: hashPassword(password) },
     update: {},
   });
   console.log(`  admin: ${email}`);

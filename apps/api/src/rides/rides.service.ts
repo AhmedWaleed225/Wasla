@@ -15,12 +15,13 @@ import {
 } from '@wasla/shared';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService, rideData } from '../notifications/notifications.service';
+import { isBlockedEither, notBlockedSql } from '../trust/block-check';
 import { displayNameOf } from '../users/display-name';
 import { badRequest, conflict, forbidden, notFound } from '../common/app-exception';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ACTIVE_STATUSES,
-  completedCounts,
+  userStats,
   priceLimitsFor,
   rideInclude,
   toBookingSummary,
@@ -244,6 +245,7 @@ export class RidesService {
       : await this.prisma.booking.findFirst({ where: { rideId, passengerId: viewerId }, orderBy: { createdAt: 'desc' } });
     if (!isMine && ride.status !== 'SCHEDULED' && !myBooking) throw notFound('RIDE_NOT_FOUND');
     if (!isMine && ride.driver.status !== 'ACTIVE' && !myBooking) throw notFound('RIDE_NOT_FOUND');
+    if (!isMine && !myBooking && (await isBlockedEither(this.prisma, viewerId, ride.driverId))) throw notFound('RIDE_NOT_FOUND');
 
     const driverBookings = isMine
       ? await this.prisma.booking.findMany({
@@ -253,7 +255,7 @@ export class RidesService {
         })
       : [];
 
-    const counts = await completedCounts(this.prisma, [ride.driverId, ...driverBookings.map((b) => b.passengerId)]);
+    const counts = await userStats(this.prisma, [ride.driverId, ...driverBookings.map((b) => b.passengerId)]);
     const showPlate = isMine || myBooking?.status === 'CONFIRMED' || myBooking?.status === 'COMPLETED';
 
     return {
@@ -271,7 +273,7 @@ export class RidesService {
       bookings: isMine
         ? driverBookings.map((b) => ({
             ...toBookingSummary(b),
-            passenger: toPublicUser(b.passenger, counts.get(b.passengerId) ?? 0),
+            passenger: toPublicUser(b.passenger, counts.get(b.passengerId)),
           }))
         : null,
       cancelReason: ride.cancelReason,
@@ -286,7 +288,7 @@ export class RidesService {
       orderBy: { departureAt: scope === 'upcoming' ? 'asc' : 'desc' },
       take: 50,
     });
-    const counts = await completedCounts(this.prisma, [userId]);
+    const counts = await userStats(this.prisma, [userId]);
     return rides.map((r) => toRideSummary(r, counts, { showPlate: true }));
   }
 
@@ -320,6 +322,7 @@ export class RidesService {
           AND r.seats_available >= ${q.seats}
           AND r.driver_id <> ${viewerId}::uuid
           AND (NOT r.women_only OR ${canSeeWomenOnly})
+          AND ${notBlockedSql(viewerId, Prisma.sql`r.driver_id`)}
           AND r.origin_lat BETWEEN ${from.lat - dLat} AND ${from.lat + dLat}
           AND r.origin_lng BETWEEN ${from.lng - dLng} AND ${from.lng + dLng}
       ) m
@@ -330,7 +333,7 @@ export class RidesService {
     if (hits.length === 0) return { rides: [], from, to };
     const rides = await this.prisma.ride.findMany({ where: { id: { in: hits.map((h) => h.id) } }, include: rideInclude });
     const byId = new Map(rides.map((r) => [r.id, r]));
-    const counts = await completedCounts(this.prisma, rides.map((r) => r.driverId));
+    const counts = await userStats(this.prisma, rides.map((r) => r.driverId));
     return {
       from,
       to,

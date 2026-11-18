@@ -4,7 +4,8 @@ import { CHAT_RULES, type ConversationDto, type MessageDto, type MessagePageDto 
 import { conflict, notFound } from '../common/app-exception';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { completedCounts, toPublicUser } from '../rides/ride-mapper';
+import { userStats, toPublicUser } from '../rides/ride-mapper';
+import { blockedSet, isBlockedEither } from '../trust/block-check';
 import { displayNameOf } from '../users/display-name';
 
 const OPEN_STATUSES = new Set(['PENDING', 'CONFIRMED', 'COMPLETED']);
@@ -70,14 +71,14 @@ export class ChatService {
     const otherRead = await this.prisma.chatRead.findUnique({ where: { bookingId_userId: { bookingId, userId: otherId } } });
     return {
       items: rows.map((m) => toMessage(m, viewerId)),
-      open: isChatOpen(booking, ride),
+      open: isChatOpen(booking, ride) && !(await isBlockedEither(this.prisma, viewerId, otherId)),
       otherReadAt: otherRead?.lastReadAt.toISOString() ?? null,
     };
   }
 
   async send(viewerId: string, bookingId: string, body: string): Promise<MessageDto> {
     const { booking, ride, otherId } = await this.thread(viewerId, bookingId);
-    if (!isChatOpen(booking, ride)) throw conflict('CHAT_CLOSED');
+    if (!isChatOpen(booking, ride) || (await isBlockedEither(this.prisma, viewerId, otherId))) throw conflict('CHAT_CLOSED');
     const now = new Date();
     const [message] = await this.prisma.$transaction([
       this.prisma.message.create({ data: { bookingId, senderId: viewerId, body } }),
@@ -118,6 +119,7 @@ export class ChatService {
     if (bookings.length === 0) return [];
     const ids = bookings.map((b) => b.id);
 
+    const blocked = await blockedSet(this.prisma, viewerId);
     const [lastMessages, unread, counts] = await Promise.all([
       this.prisma.$queryRaw<Message[]>`
         SELECT DISTINCT ON (booking_id) id, booking_id AS "bookingId", sender_id AS "senderId", body, created_at AS "createdAt"
@@ -130,7 +132,7 @@ export class ChatService {
         WHERE m.booking_id = ANY(${ids}::uuid[]) AND m.sender_id <> ${viewerId}::uuid
           AND (r.last_read_at IS NULL OR m.created_at > r.last_read_at)
         GROUP BY m.booking_id`,
-      completedCounts(this.prisma, bookings.flatMap((b) => [b.passengerId, b.ride.driverId])),
+      userStats(this.prisma, bookings.flatMap((b) => [b.passengerId, b.ride.driverId])),
     ]);
     const lastBy = new Map(lastMessages.map((m) => [m.bookingId, m]));
     const unreadBy = new Map(unread.map((u) => [u.booking_id, Number(u.n)]));
@@ -143,9 +145,9 @@ export class ChatService {
         return {
           bookingId: b.id,
           bookingStatus: b.status,
-          open: isChatOpen(b, b.ride),
+          open: isChatOpen(b, b.ride) && !blocked.has(other.id),
           role: isDriver ? 'driver' : 'passenger',
-          other: toPublicUser(other, counts.get(other.id) ?? 0),
+          other: toPublicUser(other, counts.get(other.id)),
           ride: {
             id: b.ride.id,
             departureAt: b.ride.departureAt.toISOString(),
