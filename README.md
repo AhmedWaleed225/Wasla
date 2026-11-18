@@ -9,6 +9,9 @@ Carpooling for Egypt — passengers and drivers sharing seats on the routes they
 | Shared code | `packages/shared` | Zod schemas, enums, error codes + messages, design tokens, Arabic/English strings |
 | Admin dashboard | `apps/admin` | Next.js — **Phase 5, not started** |
 
+**Full technical documentation:** [`docs/`](docs/README.md) — tech stack, architecture, database, API
+reference, business rules, per-file code reference, testing, development log and roadmap.
+
 The approved design lives in the Wasla design canvas (Claude Design). Design tokens in
 `packages/shared/src/tokens.ts` are copied from its "Design system & tokens" board.
 
