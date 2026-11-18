@@ -1,8 +1,8 @@
 # Wasla (وصلة) — Technical documentation
 
 Wasla is a carpooling platform for Egypt: drivers offer empty seats on trips they already make, and
-passengers book them. This folder documents the whole codebase as of **Phase 4, part A**
-(foundation, core carpooling, chat and notifications).
+passengers book them. This folder documents the whole codebase as of **Phase 5, part A**
+(foundation, core carpooling, chat and notifications, trust & safety, admin console).
 
 The root [`README.md`](../README.md) is the quick start. These documents go deeper.
 
@@ -19,6 +19,7 @@ The root [`README.md`](../README.md) is the quick start. These documents go deep
 | 9 | [Testing](09-testing.md) | Test suites, what each test proves, how to run them |
 | 10 | [Development log](10-development-log.md) | Every significant problem hit while building, and how it was solved |
 | 11 | [Operations & roadmap](11-operations-and-roadmap.md) | Environment variables, provider placeholders, running locally, what's next |
+| 12 | [Admin console](12-admin-console.md) | The staff console: running it, security model, roles, every screen and file |
 
 ## Status at a glance
 
@@ -29,13 +30,15 @@ The root [`README.md`](../README.md) is the quick start. These documents go deep
 | 3 | Core carpooling: cars, publishing, search, booking, driver management | Done |
 | 4A | Notifications inbox, push adapter, per-booking chat | Done |
 | 4B | Real SMS, online payments, maps, file storage, push registration in the app | Not started — needs provider accounts ([placeholders](11-operations-and-roadmap.md#provider-placeholders)) |
-| 5 | Ratings, driver verification, safety tools, admin dashboard | Not started |
+| 5A | Ratings, reports, blocking, safety screen, admin console | Done |
+| 5B | Staff management | Done |
+| 5C | Driver verification, SOS and trip sharing | Not started — need file storage, SMS and maps |
 | 6 | QA, load testing, release | Not started |
 
 ## Numbers
 
-- ~139 tracked files; TypeScript everywhere.
-- 3 database migrations, 15 tables.
-- 42 API endpoints under `/v1`.
-- 82 automated tests: 27 shared unit, 9 API unit, 46 API end-to-end (against a real PostgreSQL).
+- ~180 tracked files; TypeScript everywhere.
+- 5 database migrations, 19 tables.
+- 69 API endpoints under `/v1` (49 for the app, 20 for the admin console).
+- 97 automated tests: 27 shared unit, 9 API unit, 61 API end-to-end (against a real PostgreSQL), run in CI.
 - Every user-facing string exists in Arabic and English; Arabic is the default and lays out right-to-left.

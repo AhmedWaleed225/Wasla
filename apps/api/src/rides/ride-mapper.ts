@@ -1,5 +1,6 @@
 import { Prisma, type Booking, type Ride, type User, type UserProfile, type Vehicle } from '@prisma/client';
 import {
+  TRUST_RULES,
   priceLimitsEgp,
   type BookingSummaryDto,
   type PublicUserDto,
@@ -35,34 +36,60 @@ export function toVehicleDto(v: Vehicle, showPlate: boolean): VehicleDto {
   };
 }
 
+export interface UserStats {
+  ridesCompleted: number;
+  /** null until TRUST_RULES.minRatingsToShowAverage ratings exist, so one rating can't be traced to its author. */
+  ratingAverage: number | null;
+  ratingCount: number;
+}
+
+export const EMPTY_STATS: UserStats = { ridesCompleted: 0, ratingAverage: null, ratingCount: 0 };
+
 /** Public view of a person: display name only, gender only if they chose to show it. */
-export function toPublicUser(u: User & { profile: UserProfile | null }, ridesCompleted: number): PublicUserDto {
+export function toPublicUser(u: User & { profile: UserProfile | null }, stats: UserStats = EMPTY_STATS): PublicUserDto {
   return {
     id: u.id,
     displayName: u.profile ? displayNameOf(u.profile.fullName, u.profile.showFullLastName) : '—',
     gender: u.profile?.showGender ? u.profile.gender : null,
     memberSince: u.createdAt.toISOString(),
-    ridesCompleted,
-    ratingAverage: null,
+    ridesCompleted: stats.ridesCompleted,
+    ratingAverage: stats.ratingAverage,
+    ratingCount: stats.ratingCount,
   };
 }
 
-/** Completed trips per user, as driver or passenger. One query for a whole page of results. */
-export async function completedCounts(prisma: PrismaService, userIds: string[]): Promise<Map<string, number>> {
+/**
+ * Completed trips (as driver or passenger) and ratings received, per user —
+ * two queries for a whole page of results.
+ */
+export async function userStats(prisma: PrismaService, userIds: string[]): Promise<Map<string, UserStats>> {
   const ids = [...new Set(userIds)];
-  if (ids.length === 0) return new Map();
-  const rows = await prisma.$queryRaw<{ user_id: string; n: bigint }[]>`
-    SELECT user_id, count(*) AS n FROM (
-      SELECT driver_id AS user_id FROM rides WHERE status = 'COMPLETED' AND driver_id = ANY(${ids}::uuid[])
-      UNION ALL
-      SELECT passenger_id FROM bookings WHERE status = 'COMPLETED' AND passenger_id = ANY(${ids}::uuid[])
-    ) t GROUP BY user_id`;
-  return new Map(rows.map((r) => [r.user_id, Number(r.n)]));
+  const out = new Map<string, UserStats>();
+  if (ids.length === 0) return out;
+  const [trips, ratings] = await Promise.all([
+    prisma.$queryRaw<{ user_id: string; n: bigint }[]>`
+      SELECT user_id, count(*) AS n FROM (
+        SELECT driver_id AS user_id FROM rides WHERE status = 'COMPLETED' AND driver_id = ANY(${ids}::uuid[])
+        UNION ALL
+        SELECT passenger_id FROM bookings WHERE status = 'COMPLETED' AND passenger_id = ANY(${ids}::uuid[])
+      ) t GROUP BY user_id`,
+    prisma.$queryRaw<{ ratee_id: string; n: bigint; avg: number }[]>`
+      SELECT ratee_id, count(*) AS n, avg(stars)::float AS avg
+      FROM ratings WHERE ratee_id = ANY(${ids}::uuid[]) GROUP BY ratee_id`,
+  ]);
+  for (const id of ids) out.set(id, { ...EMPTY_STATS });
+  for (const t of trips) out.get(t.user_id)!.ridesCompleted = Number(t.n);
+  for (const r of ratings) {
+    const s = out.get(r.ratee_id)!;
+    s.ratingCount = Number(r.n);
+    s.ratingAverage = s.ratingCount >= TRUST_RULES.minRatingsToShowAverage ? Math.round(r.avg * 10) / 10 : null;
+  }
+  return out;
 }
 
 export function toRideSummary(
   r: RideWithDriver,
-  counts: Map<string, number>,
+  counts: Map<string, UserStats>,
   opts: { showPlate: boolean; match?: { pickupKm: number; dropoffKm: number } },
 ): RideSummaryDto {
   return {
@@ -90,7 +117,7 @@ export function toRideSummary(
     seatsAvailable: r.seatsAvailable,
     bookingMode: r.bookingMode,
     womenOnly: r.womenOnly,
-    driver: toPublicUser(r.driver, counts.get(r.driverId) ?? 0),
+    driver: toPublicUser(r.driver, counts.get(r.driverId)),
     vehicle: toVehicleDto(r.vehicle, opts.showPlate),
     ...(opts.match && {
       match: {

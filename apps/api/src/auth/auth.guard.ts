@@ -59,9 +59,11 @@ export class AuthGuard implements CanActivate {
       where: { id: payload.sid },
       select: { userId: true, revokedAt: true, user: { select: { status: true, roles: true, activeRole: true } } },
     });
-    if (!session || session.userId !== payload.sub || session.revokedAt) throw unauthorized('AUTH_SESSION_REVOKED');
+    if (!session || session.userId !== payload.sub) throw unauthorized('AUTH_SESSION_REVOKED');
+    // Suspension is reported before revocation: suspending also revokes sessions, and
+    // the app should say "account suspended", not just "log in again".
     if (session.user.status === 'SUSPENDED') throw forbidden('AUTH_ACCOUNT_SUSPENDED');
-    if (session.user.status === 'DELETED') throw unauthorized('AUTH_SESSION_REVOKED');
+    if (session.revokedAt || session.user.status === 'DELETED') throw unauthorized('AUTH_SESSION_REVOKED');
 
     req.auth = {
       userId: payload.sub,

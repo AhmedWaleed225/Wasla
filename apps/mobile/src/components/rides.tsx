@@ -69,7 +69,15 @@ export function RideCard({ ride, onPress, footer }: { ride: RideSummaryDto; onPr
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <Avatar name={ride.driver.displayName} size={32} />
         <View style={{ flex: 1 }}>
-          <T weight={600} numberOfLines={1}>{ride.driver.displayName}</T>
+          <T weight={600} numberOfLines={1}>
+            {ride.driver.displayName}
+            {ride.driver.ratingAverage !== null ? (
+              <T variant="caption" color={colors.accentText}>
+                {'  '}
+                {t('rating.ratingShort', { avg: f.number(ride.driver.ratingAverage), count: f.number(ride.driver.ratingCount) })}
+              </T>
+            ) : null}
+          </T>
           <T variant="caption" muted numberOfLines={1}>
             {ride.vehicle.make} {ride.vehicle.model} · {ride.vehicle.color}
           </T>

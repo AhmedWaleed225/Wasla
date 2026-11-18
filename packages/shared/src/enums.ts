@@ -81,3 +81,64 @@ export type NotificationType = (typeof NotificationType)[keyof typeof Notificati
 
 export const PushPlatform = { IOS: 'ios', ANDROID: 'android' } as const;
 export type PushPlatform = (typeof PushPlatform)[keyof typeof PushPlatform];
+
+// ---------- Trust & safety ----------
+
+export const RatingTag = {
+  PUNCTUAL: 'PUNCTUAL',
+  FRIENDLY: 'FRIENDLY',
+  RESPECTFUL: 'RESPECTFUL',
+  SAFE_DRIVING: 'SAFE_DRIVING', // driver only
+  CLEAN_CAR: 'CLEAN_CAR', // driver only
+  LATE: 'LATE',
+  RUDE: 'RUDE',
+  UNSAFE_DRIVING: 'UNSAFE_DRIVING', // driver only
+} as const;
+export type RatingTag = (typeof RatingTag)[keyof typeof RatingTag];
+export const RATING_TAGS = Object.values(RatingTag);
+/** Tags that only make sense when rating a driver. */
+export const DRIVER_ONLY_RATING_TAGS: RatingTag[] = ['SAFE_DRIVING', 'CLEAN_CAR', 'UNSAFE_DRIVING'];
+
+export const ReportReason = {
+  SAFETY: 'SAFETY',
+  HARASSMENT: 'HARASSMENT',
+  INAPPROPRIATE_MESSAGES: 'INAPPROPRIATE_MESSAGES',
+  NO_SHOW: 'NO_SHOW',
+  PAYMENT: 'PAYMENT',
+  FAKE_PROFILE: 'FAKE_PROFILE',
+  OTHER: 'OTHER',
+} as const;
+export type ReportReason = (typeof ReportReason)[keyof typeof ReportReason];
+export const REPORT_REASONS = Object.values(ReportReason);
+/** Reviewed first. */
+export const URGENT_REPORT_REASONS: ReportReason[] = ['SAFETY', 'HARASSMENT'];
+
+export const ReportStatus = { OPEN: 'OPEN', IN_REVIEW: 'IN_REVIEW', RESOLVED: 'RESOLVED', DISMISSED: 'DISMISSED' } as const;
+export type ReportStatus = (typeof ReportStatus)[keyof typeof ReportStatus];
+export const REPORT_STATUSES = Object.values(ReportStatus);
+
+export const AdminRole = { SUPER_ADMIN: 'SUPER_ADMIN', OPERATIONS: 'OPERATIONS', SUPPORT: 'SUPPORT', FINANCE: 'FINANCE' } as const;
+export type AdminRole = (typeof AdminRole)[keyof typeof AdminRole];
+
+/**
+ * What each admin role may do. The API enforces this; the console only uses it
+ * to hide buttons a role can't use.
+ */
+export const ADMIN_PERMISSIONS = {
+  viewOverview: ['SUPER_ADMIN', 'OPERATIONS', 'SUPPORT', 'FINANCE'],
+  viewUsers: ['SUPER_ADMIN', 'OPERATIONS', 'SUPPORT', 'FINANCE'],
+  viewUserContact: ['SUPER_ADMIN', 'OPERATIONS', 'SUPPORT'],
+  suspendUsers: ['SUPER_ADMIN', 'OPERATIONS'],
+  viewRides: ['SUPER_ADMIN', 'OPERATIONS', 'SUPPORT', 'FINANCE'],
+  cancelRides: ['SUPER_ADMIN', 'OPERATIONS'],
+  viewReports: ['SUPER_ADMIN', 'OPERATIONS', 'SUPPORT'],
+  handleReports: ['SUPER_ADMIN', 'OPERATIONS', 'SUPPORT'],
+  viewReportChat: ['SUPER_ADMIN', 'OPERATIONS', 'SUPPORT'],
+  viewAudit: ['SUPER_ADMIN', 'OPERATIONS'],
+  manageStaff: ['SUPER_ADMIN'],
+} as const satisfies Record<string, readonly AdminRole[]>;
+export type AdminPermission = keyof typeof ADMIN_PERMISSIONS;
+
+export function adminCan(role: AdminRole, permission: AdminPermission): boolean {
+  return (ADMIN_PERMISSIONS[permission] as readonly AdminRole[]).includes(role);
+}

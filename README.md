@@ -7,7 +7,7 @@ Carpooling for Egypt — passengers and drivers sharing seats on the routes they
 | Mobile app (iOS / Android) | `apps/mobile` | Expo SDK 58, Expo Router, TypeScript, TanStack Query, Zustand, React Hook Form + Zod, i18next (Arabic RTL + English) |
 | API | `apps/api` | NestJS 11 (modular monolith), Prisma 6, PostgreSQL 16 + PostGIS, Redis (later phases) |
 | Shared code | `packages/shared` | Zod schemas, enums, error codes + messages, design tokens, Arabic/English strings |
-| Admin dashboard | `apps/admin` | Next.js — **Phase 5, not started** |
+| Admin console | `apps/admin` | Vite + React — staff sign-in, users, rides, reports, audit log |
 
 **Full technical documentation:** [`docs/`](docs/README.md) — tech stack, architecture, database, API
 reference, business rules, per-file code reference, testing, development log and roadmap.
@@ -17,7 +17,7 @@ The approved design lives in the Wasla design canvas (Claude Design). Design tok
 
 ---
 
-## Status — Phase 4, part A (chat and notifications)
+## Status — Phase 5, part A (trust, safety, admin console)
 
 | Area | State |
 |---|---|
@@ -35,7 +35,9 @@ The approved design lives in the Wasla design canvas (Claude Design). Design tok
 | Push notifications (Expo) | API done, off by default (`PUSH_PROVIDER`); the app doesn't register for push yet |
 | Private chat per booking (driver ↔ that passenger), unread counts, "seen" | Done (polling, not live sockets) |
 | Maps, online payments, real SMS, file uploads | Not started — each needs a provider account (Phase 4, part B) |
-| Ratings, verification, safety tools, admin dashboard | Not started (Phase 5) |
+| Ratings after trips (average shown from 3), reports, blocking, safety screen | Done |
+| Admin console: overview, users, suspend/reinstate, rides, reports, audit log, staff accounts | Done (`pnpm admin:dev`) |
+| Driver verification, SOS / trip sharing | Not started — need file storage, SMS and maps |
 
 See **Known limitations** at the bottom.
 
@@ -108,6 +110,26 @@ pnpm mobile:dev
 ```
 
 Scan the QR code with Expo Go (Android) or the Camera app (iOS).
+
+### Previewing the mobile app in a browser
+
+For a quick look without a phone (Node 22.13+):
+
+```bash
+pnpm mobile:web
+```
+
+On Node 20 the Expo dev server doesn't start, but a production web build does. Export it, then serve the
+`dist-web` folder with any static file server that falls back to `index.html`, on port 8081 (already
+allowed by `CORS_ORIGINS`):
+
+```bash
+pnpm --filter @wasla/mobile exec expo export --platform web --output-dir dist-web
+```
+
+The browser build is for previewing only. On the web the session token is kept in browser storage
+(phones use the Keychain/Keystore), and phone features such as calling or permission prompts behave
+differently.
 
 ### Logging in during development
 

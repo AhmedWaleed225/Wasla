@@ -1,5 +1,15 @@
 import { z } from 'zod';
-import { BOOKING_MODES, GENDERS, LOCALES, LOCATION_KINDS, SAVED_LOCATION_LABELS, USER_ROLES } from './enums';
+import {
+  BOOKING_MODES,
+  GENDERS,
+  LOCALES,
+  LOCATION_KINDS,
+  RATING_TAGS,
+  REPORT_REASONS,
+  REPORT_STATUSES,
+  SAVED_LOCATION_LABELS,
+  USER_ROLES,
+} from './enums';
 import { normalizeEgyptianMobile, toAsciiDigits } from './phone';
 import { PLATE_DIGITS_RE, PLATE_LETTERS_RE, RIDE_RULES, SEARCH_RULES, normalizePlateLetters } from './rides';
 
@@ -310,3 +320,99 @@ export const pushDeviceSchema = z.object({
   platform: z.enum(['ios', 'android']),
 });
 export type PushDeviceInput = z.infer<typeof pushDeviceSchema>;
+
+// ---------- Trust & safety ----------
+
+export const TRUST_RULES = {
+  /** Ratings can be left this many days after a ride is completed. */
+  ratingWindowDays: 14,
+  /** An average is only shown once someone has this many ratings, so one rating can't be traced to its author. */
+  minRatingsToShowAverage: 3,
+  maxRatingTags: 4,
+  ratingCommentMax: 280,
+  reportDetailsMax: 1000,
+  maxReportsPerDay: 10,
+} as const;
+
+export const createRatingSchema = z.object({
+  stars: z.coerce.number().int().min(1, 'RATING_STARS_RANGE').max(5, 'RATING_STARS_RANGE'),
+  tags: z
+    .array(z.enum(RATING_TAGS as [string, ...string[]]))
+    .max(TRUST_RULES.maxRatingTags)
+    .default([])
+    .transform((t) => [...new Set(t)]),
+  comment: z.string().trim().max(TRUST_RULES.ratingCommentMax).optional(),
+});
+export type CreateRatingInput = z.input<typeof createRatingSchema>;
+export type CreateRatingData = z.output<typeof createRatingSchema>;
+
+export const createReportSchema = z.object({
+  bookingId: z.string().uuid(),
+  reportedUserId: z.string().uuid(),
+  reason: z.enum(REPORT_REASONS as [string, ...string[]]),
+  details: z.string().trim().max(TRUST_RULES.reportDetailsMax).optional(),
+  /** Also block the person in the same step. */
+  block: z.boolean().default(false),
+});
+export type CreateReportInput = z.input<typeof createReportSchema>;
+export type CreateReportData = z.output<typeof createReportSchema>;
+
+// ---------- Admin ----------
+
+export const adminLoginSchema = z.object({
+  email: z.string().trim().toLowerCase().email('ADMIN_LOGIN_FAILED').max(254),
+  password: z.string().min(1, 'ADMIN_LOGIN_FAILED').max(200),
+});
+export type AdminLoginInput = z.infer<typeof adminLoginSchema>;
+
+export const adminPageSchema = z.object({
+  page: z.coerce.number().int().min(1).max(1000).default(1),
+  q: z.string().trim().max(80).optional(),
+  status: z.string().trim().max(40).optional(),
+});
+export type AdminPageQuery = z.output<typeof adminPageSchema>;
+
+export const adminReasonSchema = z.object({
+  reason: z.string().trim().min(3, 'ADMIN_REASON_REQUIRED').max(200, 'ADMIN_REASON_REQUIRED'),
+});
+export type AdminReasonInput = z.infer<typeof adminReasonSchema>;
+
+export const adminUpdateReportSchema = z
+  .object({
+    status: z.enum(REPORT_STATUSES as [string, ...string[]]).optional(),
+    adminNote: z.string().trim().max(2000).optional(),
+  })
+  .refine((v) => v.status !== undefined || v.adminNote !== undefined, 'VALIDATION_EMPTY_UPDATE');
+export type AdminUpdateReportInput = z.infer<typeof adminUpdateReportSchema>;
+
+export const blockUserSchema = z.object({
+  userId: z.string().uuid(),
+});
+export type BlockUserInput = z.infer<typeof blockUserSchema>;
+
+// ---------- Staff management ----------
+
+const ADMIN_ROLES = ['SUPER_ADMIN', 'OPERATIONS', 'SUPPORT', 'FINANCE'] as const;
+
+export const adminCreateStaffSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+  name: z.string().trim().min(2).max(80),
+  role: z.enum(ADMIN_ROLES),
+});
+export type AdminCreateStaffInput = z.infer<typeof adminCreateStaffSchema>;
+
+export const adminUpdateStaffSchema = z
+  .object({
+    role: z.enum(ADMIN_ROLES).optional(),
+    disabled: z.boolean().optional(),
+  })
+  .refine((v) => v.role !== undefined || v.disabled !== undefined, 'VALIDATION_EMPTY_UPDATE');
+export type AdminUpdateStaffInput = z.infer<typeof adminUpdateStaffSchema>;
+
+export const adminChangePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'ADMIN_WRONG_PASSWORD').max(200),
+    newPassword: z.string().min(12, 'ADMIN_PASSWORD_WEAK').max(200, 'ADMIN_PASSWORD_WEAK'),
+  })
+  .refine((v) => v.currentPassword !== v.newPassword, { message: 'ADMIN_PASSWORD_WEAK', path: ['newPassword'] });
+export type AdminChangePasswordInput = z.infer<typeof adminChangePasswordSchema>;

@@ -32,6 +32,13 @@ erDiagram
   rides ||--o{ bookings : has
   bookings ||--o{ messages : "thread of"
   bookings ||--o{ chat_reads : "read state"
+  bookings ||--o{ ratings : "rated in"
+  bookings ||--o{ reports : "context of"
+  users ||--o{ ratings : "gives / receives"
+  users ||--o{ reports : "files / is reported"
+  users ||--o{ blocks : "blocks / is blocked"
+  admin_users ||--o{ admin_sessions : "signs in with"
+  admin_users ||--o{ reports : handles
   otp_challenges }o..|| users : "by phone, no FK"
 ```
 
@@ -54,6 +61,8 @@ survive deletions).
 | `BookingStatus` | `PENDING`, `CONFIRMED`, `DECLINED`, `CANCELLED_BY_PASSENGER`, `CANCELLED_BY_DRIVER`, `EXPIRED`, `COMPLETED` |
 | `PaymentMethod` | `CASH` |
 | `NotificationType` | `BOOKING_REQUESTED`, `BOOKING_CONFIRMED`, `BOOKING_ACCEPTED`, `BOOKING_DECLINED`, `BOOKING_EXPIRED`, `BOOKING_CANCELLED`, `RIDE_CANCELLED`, `RIDE_COMPLETED` |
+| `ReportReason` | `SAFETY`, `HARASSMENT`, `INAPPROPRIATE_MESSAGES`, `NO_SHOW`, `PAYMENT`, `FAKE_PROFILE`, `OTHER` |
+| `ReportStatus` | `OPEN`, `IN_REVIEW`, `RESOLVED`, `DISMISSED` |
 | `AdminRole` | `SUPER_ADMIN`, `OPERATIONS`, `SUPPORT`, `FINANCE` |
 | `ActorType` | `USER`, `ADMIN`, `SYSTEM` |
 
@@ -177,10 +186,27 @@ Check: body not blank. Trigger `messages_no_update` rejects any UPDATE. Index `(
 **`chat_reads`** — `(booking_id, user_id)` PK, `last_read_at`. Unread = messages from the other
 person after this time.
 
+### Trust and safety
+
+**`ratings`** — `booking_id`, `rater_id`, `ratee_id`, `stars` (1–5), `tags text[]` (≤ 4),
+`comment` (≤ 280, staff-only). Unique `(booking_id, rater_id)`: one rating per person per trip.
+Checks: stars range, not rating yourself, tag count. Index `(ratee_id, created_at)`.
+
+**`reports`** — `reporter_id`, `reported_user_id`, `booking_id`, `reason`, `details` (≤ 1000),
+`status`, `admin_note`, `handled_by_id` (admin), `resolved_at`. Check: not reporting yourself.
+Partial unique index `reports_one_open_per_booking` on `(reporter_id, booking_id) WHERE status IN
+('OPEN','IN_REVIEW')`. Indexes on `(status, created_at)`, `reported_user_id`, `(reporter_id, created_at)`.
+
+**`blocks`** — `(blocker_id, blocked_id)` primary key, `created_at`. Check: not blocking yourself.
+
 ### Administration
 
-**`admin_users`** — staff accounts for the Phase 5 dashboard. `email`, `name`, `password_hash`
-(scrypt), `role`, `disabled_at`, `last_login_at`.
+**`admin_users`** — staff accounts for the console. `email`, `name`, `password_hash`
+(scrypt), `role`, `disabled_at`, `last_login_at`, `failed_logins`, `locked_until`,
+`must_change_password` (set for new or reset accounts).
+
+**`admin_sessions`** — `admin_id`, `token_hash` (SHA-256 of the cookie token, unique), `ip`,
+`user_agent`, `expires_at` (8 h), `revoked_at`.
 
 **`audit_logs`** — append-only record. `actor_type`, `actor_id`, `action` (e.g. `RIDE_PUBLISHED`,
 `BOOKING_CANCELLED`, `auth.refresh_token_reuse`), `entity_type`, `entity_id`, `metadata jsonb`, `ip`.
@@ -200,6 +226,8 @@ hint and the server's check agree.
 | `20261117120000_init` | Identity, sessions, OTP, places, saved places, admins, audit log; checks on roles, attempts, coordinates; one Home/Work per user; append-only audit trigger |
 | `20261118100000_rides_bookings` | Vehicles, rides, bookings; seat/price/money checks; one active booking per passenger; active plate uniqueness; `wasla_distance_km`; search index |
 | `20261118140000_messaging_notifications` | Notifications, push devices, messages, chat reads; non-blank and no-edit rules for messages |
+| `20261119100000_admin_staff_management` | `admin_users.must_change_password` |
+| `20261118180000_trust_safety_admin` | Ratings, reports, blocks, admin sessions, admin lockout columns; one open report per trip; no self-rating, -reporting or -blocking |
 
 How they were produced: `prisma migrate diff` generated the table SQL, then the hand-written section
 was appended under a clear comment. Apply with `pnpm db:migrate` (dev) or `prisma migrate deploy`
@@ -218,7 +246,8 @@ upcoming ones) and **refuses to run with `NODE_ENV=production`**.
   driver), `+201000000003` Youssef Samir (passenger + driver, English), each with Home and Work.
 - Cars and rides: Karim's Elantra (Smart Village B2 ⇄ CFC Gate 4, instant) and Youssef's Cerato
   (Rehab Gate 13 → Tahrir, request mode), departing within the next ~30 hours of seeding.
-- An admin is created only if `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` are set.
+- A `SUPER_ADMIN` for the console is created only if `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`
+  (12+ characters) are set.
 
 ## Test database
 

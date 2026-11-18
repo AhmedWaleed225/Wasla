@@ -15,7 +15,8 @@ export function configureApp(app: NestExpressApplication) {
   app.set('trust proxy', 1);
   app.useBodyParser('json', { limit: '100kb' });
   const origins = env.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean);
-  app.enableCors({ origin: origins.length ? origins : false, credentials: false });
+  // Credentials are allowed only for the listed origins (the admin console sends its session cookie).
+  app.enableCors({ origin: origins.length ? origins : false, credentials: origins.length > 0 });
   app.enableShutdownHooks();
   return env;
 }

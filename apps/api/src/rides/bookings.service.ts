@@ -3,12 +3,13 @@ import type { Booking, BookingStatus, Notification, Prisma } from '@prisma/clien
 import { RIDE_RULES, type BookingDto } from '@wasla/shared';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService, rideData } from '../notifications/notifications.service';
+import { isBlockedEither } from '../trust/block-check';
 import { displayNameOf } from '../users/display-name';
 import { AppException, conflict, forbidden, notFound } from '../common/app-exception';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ACTIVE_STATUSES,
-  completedCounts,
+  userStats,
   isUniqueViolation,
   isAnyUniqueViolation,
   rideInclude,
@@ -79,6 +80,8 @@ export class BookingsService {
         if (ride.status !== 'SCHEDULED' || ride.driver.status !== 'ACTIVE') throw conflict('RIDE_NOT_SCHEDULED');
         if (ride.departureAt <= new Date()) throw conflict('RIDE_ALREADY_DEPARTED');
         if (ride.womenOnly && passenger.profile!.gender !== 'FEMALE') throw forbidden('BOOKING_WOMEN_ONLY');
+        // Deliberately vague: the other person must not learn they were blocked.
+        if (await isBlockedEither(tx, passengerId, ride.driverId)) throw forbidden('RIDE_NOT_AVAILABLE');
 
         const existing = await tx.booking.findFirst({
           where: { rideId, passengerId, status: { in: [...ACTIVE_STATUSES] } },
@@ -226,11 +229,52 @@ export class BookingsService {
       orderBy: { ride: { departureAt: upcoming ? 'asc' : 'desc' } },
       take: 50,
     });
-    const counts = await completedCounts(this.prisma, rows.map((r) => r.ride.driverId));
+    const counts = await userStats(this.prisma, rows.map((r) => r.ride.driverId));
     return rows.map((b) => ({
       ...toBookingSummary(b),
       ride: toRideSummary(b.ride, counts, { showPlate: b.status === 'CONFIRMED' || b.status === 'COMPLETED' }),
     }));
+  }
+
+  /**
+   * When one person blocks another, active bookings between them on rides that
+   * haven't left are cancelled and their seats returned. The other person is told
+   * their booking ended, not that they were blocked.
+   */
+  async cancelForBlock(blockerId: string, otherId: string): Promise<number> {
+    const between = await this.prisma.booking.findMany({
+      where: {
+        status: { in: [...ACTIVE_STATUSES] },
+        ride: { status: 'SCHEDULED', departureAt: { gt: new Date() } },
+        OR: [
+          { passengerId: blockerId, ride: { driverId: otherId } },
+          { passengerId: otherId, ride: { driverId: blockerId } },
+        ],
+      },
+      select: { id: true, rideId: true },
+    });
+    let cancelled = 0;
+    for (const b of between) {
+      const notes = await this.prisma.$transaction(async (tx) => {
+        const ride = await this.lockRide(tx, b.rideId);
+        const booking = await tx.booking.findUniqueOrThrow({ where: { id: b.id } });
+        if (!ACTIVE_STATUSES.includes(booking.status as (typeof ACTIVE_STATUSES)[number])) return [];
+        const blockerIsPassenger = booking.passengerId === blockerId;
+        await this.closeAndRelease(tx, booking, blockerIsPassenger ? 'CANCELLED_BY_PASSENGER' : 'CANCELLED_BY_DRIVER', {});
+        await this.audit.record(
+          { actorType: 'USER', actorId: blockerId, action: 'BOOKING_CANCELLED_BY_BLOCK', entityType: 'booking', entityId: booking.id },
+          tx,
+        );
+        cancelled += 1;
+        return this.notifications.create(tx, [
+          blockerIsPassenger
+            ? { userId: ride.driverId, type: 'BOOKING_CANCELLED', rideId: ride.id, bookingId: booking.id, data: rideData(ride, await this.nameOf(tx, blockerId)) }
+            : { userId: booking.passengerId, type: 'BOOKING_DECLINED', rideId: ride.id, bookingId: booking.id, data: rideData(ride, await this.nameOf(tx, blockerId)) },
+        ]);
+      });
+      this.notifications.dispatch(notes);
+    }
+    return cancelled;
   }
 
   /** Lapses unanswered requests and gives their seats back. Safe to run on several instances at once. */
@@ -297,7 +341,7 @@ export class BookingsService {
 
   private async toDto(b: Booking, viewerId: string): Promise<BookingDto> {
     const ride = await this.prisma.ride.findUniqueOrThrow({ where: { id: b.rideId }, include: rideInclude });
-    const counts = await completedCounts(this.prisma, [ride.driverId]);
+    const counts = await userStats(this.prisma, [ride.driverId]);
     const isDriver = ride.driverId === viewerId;
     const showPlate = isDriver || b.status === 'CONFIRMED' || b.status === 'COMPLETED';
     return { ...toBookingSummary(b), ride: toRideSummary(ride, counts, { showPlate }) };

@@ -99,3 +99,18 @@ export async function publishRide(
     .expect(201);
   return res.body as { id: string; departureAt: string };
 }
+
+/** Passenger books, the ride "leaves", the driver marks it done. Returns the booking id. */
+export async function completedBooking(
+  app: NestExpressApplication,
+  prisma: { ride: { update: (a: { where: { id: string }; data: { departureAt: Date } }) => Promise<unknown> } },
+  driver: { accessToken: string },
+  rideId: string,
+  passengerToken: string,
+): Promise<string> {
+  const server = app.getHttpServer();
+  const b = await request(server).post(`/v1/rides/${rideId}/bookings`).set(bearer(passengerToken)).send({}).expect(201);
+  await prisma.ride.update({ where: { id: rideId }, data: { departureAt: new Date(Date.now() - 3_600_000) } });
+  await request(server).post(`/v1/rides/${rideId}/complete`).set(bearer(driver.accessToken)).expect(200);
+  return b.body.id as string;
+}
