@@ -26,3 +26,4 @@ expo-env.d.ts
 
 # CI bundle check output
 apps/mobile/dist-ci/
+apps/mobile/dist-web/

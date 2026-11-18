@@ -111,6 +111,26 @@ pnpm mobile:dev
 
 Scan the QR code with Expo Go (Android) or the Camera app (iOS).
 
+### Previewing the mobile app in a browser
+
+For a quick look without a phone (Node 22.13+):
+
+```bash
+pnpm mobile:web
+```
+
+On Node 20 the Expo dev server doesn't start, but a production web build does. Export it, then serve the
+`dist-web` folder with any static file server that falls back to `index.html`, on port 8081 (already
+allowed by `CORS_ORIGINS`):
+
+```bash
+pnpm --filter @wasla/mobile exec expo export --platform web --output-dir dist-web
+```
+
+The browser build is for previewing only. On the web the session token is kept in browser storage
+(phones use the Keychain/Keystore), and phone features such as calling or permission prompts behave
+differently.
+
 ### Logging in during development
 
 `OTP_PROVIDER=mock` never sends SMS. The 6-digit code is printed in the API terminal:

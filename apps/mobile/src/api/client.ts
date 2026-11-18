@@ -1,5 +1,5 @@
 import { errorMessage, isErrorCode, type ApiErrorBody, type AuthTokensDto, type ErrorCode } from '@wasla/shared';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../secure-storage';
 import i18n from '../i18n';
 
 const BASE_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000/v1').replace(/\/$/, '');

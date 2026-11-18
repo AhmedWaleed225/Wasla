@@ -19,6 +19,7 @@
     "db:reset": "pnpm --filter @wasla/api db:reset",
     "api:dev": "pnpm --filter @wasla/api dev",
     "mobile:dev": "pnpm --filter @wasla/mobile start",
+    "mobile:web": "pnpm --filter @wasla/mobile exec expo start --web",
     "admin:dev": "pnpm --filter @wasla/admin dev"
   },
   "devDependencies": {
