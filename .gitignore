@@ -1,0 +1,28 @@
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+*.log
+.DS_Store
+
+# env files — only the *.example templates are committed
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Expo / React Native
+.expo/
+apps/mobile/ios/
+apps/mobile/android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+web-build/
+expo-env.d.ts
+
+# CI bundle check output
+apps/mobile/dist-ci/

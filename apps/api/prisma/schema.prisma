@@ -1,0 +1,459 @@
+// Wasla database schema.
+// Phase 2: identity, sessions, locations, audit. Phase 3: vehicles, rides, bookings.
+// Phase 4: notifications, push devices, booking chat. Payments and safety come later.
+// Enum values mirror packages/shared/src/enums.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enums ----------
+
+enum UserRole {
+  PASSENGER
+  DRIVER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum Gender {
+  FEMALE
+  MALE
+}
+
+enum Locale {
+  ar
+  en
+}
+
+enum OtpPurpose {
+  LOGIN
+}
+
+enum LocationKind {
+  GOVERNORATE
+  CITY
+  DISTRICT
+  NEIGHBORHOOD
+  COMPOUND
+  GATE
+  LANDMARK
+  UNIVERSITY
+  MALL
+  BUSINESS_DISTRICT
+  TRANSIT
+}
+
+enum SavedLocationLabel {
+  HOME
+  WORK
+  OTHER
+}
+
+enum RideStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+enum BookingMode {
+  INSTANT
+  REQUEST
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  DECLINED
+  CANCELLED_BY_PASSENGER
+  CANCELLED_BY_DRIVER
+  EXPIRED
+  COMPLETED
+}
+
+enum PaymentMethod {
+  CASH
+}
+
+enum NotificationType {
+  BOOKING_REQUESTED
+  BOOKING_CONFIRMED
+  BOOKING_ACCEPTED
+  BOOKING_DECLINED
+  BOOKING_EXPIRED
+  BOOKING_CANCELLED
+  RIDE_CANCELLED
+  RIDE_COMPLETED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  OPERATIONS
+  SUPPORT
+  FINANCE
+}
+
+enum ActorType {
+  USER
+  ADMIN
+  SYSTEM
+}
+
+// ---------- Identity ----------
+
+/// A person. One account can hold both the PASSENGER and DRIVER roles.
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  phoneE164       String     @unique @map("phone_e164") @db.VarChar(16)
+  email           String?    @unique @db.VarChar(254)
+  /// Roles granted by the backend. Clients can only request changes; the API decides.
+  roles           UserRole[] @default([PASSENGER])
+  activeRole      UserRole   @default(PASSENGER) @map("active_role")
+  status          UserStatus @default(ACTIVE)
+  locale          Locale     @default(ar)
+  phoneVerifiedAt DateTime?  @map("phone_verified_at")
+  suspendedReason String?    @map("suspended_reason")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+  deletedAt       DateTime?  @map("deleted_at")
+
+  profile        UserProfile?
+  sessions       Session[]
+  savedLocations SavedLocation[]
+  vehicles       Vehicle[]
+  ridesDriven    Ride[]
+  bookings       Booking[]
+  notifications  Notification[]
+  pushDevices    PushDevice[]
+  messagesSent   Message[]
+  chatReads      ChatRead[]
+
+  @@index([status])
+  @@map("users")
+}
+
+model UserProfile {
+  userId           String   @id @map("user_id") @db.Uuid
+  fullName         String   @map("full_name") @db.VarChar(80)
+  dateOfBirth      DateTime @map("date_of_birth") @db.Date
+  gender           Gender
+  bio              String?  @db.VarChar(280)
+  photoKey         String?  @map("photo_key") @db.VarChar(255)
+  prefQuiet        Boolean  @default(false) @map("pref_quiet")
+  prefMusicOk      Boolean  @default(true) @map("pref_music_ok")
+  prefAc           Boolean  @default(true) @map("pref_ac")
+  prefSmokingOk    Boolean  @default(false) @map("pref_smoking_ok")
+  showGender       Boolean  @default(false) @map("show_gender")
+  showFullLastName Boolean  @default(false) @map("show_full_last_name")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+/// A refresh-token session. Tokens are stored only as SHA-256 hashes.
+/// Rotation: each refresh creates a new row in the same family; reusing an old
+/// token revokes the whole family (stolen-token detection).
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  familyId         String    @map("family_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash") @db.Char(64)
+  deviceName       String?   @map("device_name") @db.VarChar(120)
+  userAgent        String?   @map("user_agent") @db.VarChar(255)
+  ip               String?   @db.VarChar(64)
+  expiresAt        DateTime  @map("expires_at")
+  rotatedAt        DateTime? @map("rotated_at")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("sessions")
+}
+
+/// One-time codes. Only an HMAC of the code is stored.
+model OtpChallenge {
+  id         String     @id @default(uuid()) @db.Uuid
+  phoneE164  String     @map("phone_e164") @db.VarChar(16)
+  purpose    OtpPurpose @default(LOGIN)
+  codeHash   String     @map("code_hash") @db.Char(64)
+  attempts   Int        @default(0)
+  expiresAt  DateTime   @map("expires_at")
+  consumedAt DateTime?  @map("consumed_at")
+  ip         String?    @db.VarChar(64)
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  @@index([phoneE164, createdAt])
+  @@map("otp_challenges")
+}
+
+// ---------- Places ----------
+
+/// Egyptian places: governorates down to compound gates and landmarks.
+/// Hierarchical via parentId. Coordinates are WGS84.
+model Location {
+  id         String       @id @default(uuid()) @db.Uuid
+  /// Stable key used by the seed (e.g. "cairo.new-cairo.cfc.gate-4").
+  slug       String       @unique @db.VarChar(120)
+  kind       LocationKind
+  nameEn     String       @map("name_en") @db.VarChar(120)
+  nameAr     String       @map("name_ar") @db.VarChar(120)
+  /// Extra search terms (abbreviations, common spellings): "CFC", "AUC", "التجمع".
+  aliases    String[]     @default([])
+  parentId   String?      @map("parent_id") @db.Uuid
+  lat        Float?
+  lng        Float?
+  /// Higher = shown first among equal matches.
+  popularity Int          @default(0)
+  isActive   Boolean      @default(true) @map("is_active")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  parent           Location?       @relation("LocationTree", fields: [parentId], references: [id])
+  children         Location[]      @relation("LocationTree")
+  savedLocations   SavedLocation[]
+  ridesFrom        Ride[]          @relation("RideOrigin")
+  ridesTo          Ride[]          @relation("RideDestination")
+
+  @@index([kind])
+  @@index([parentId])
+  @@map("locations")
+}
+
+model SavedLocation {
+  id         String             @id @default(uuid()) @db.Uuid
+  userId     String             @map("user_id") @db.Uuid
+  label      SavedLocationLabel
+  customName String?            @map("custom_name") @db.VarChar(40)
+  locationId String?            @map("location_id") @db.Uuid
+  lat        Float
+  lng        Float
+  pickupNote String?            @map("pickup_note") @db.VarChar(140)
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location Location? @relation(fields: [locationId], references: [id])
+
+  @@index([userId])
+  @@map("saved_locations")
+}
+
+// ---------- Rides ----------
+
+/// A driver's car. Verification (licence, registration) arrives in Phase 5.
+model Vehicle {
+  id           String    @id @default(uuid()) @db.Uuid
+  ownerId      String    @map("owner_id") @db.Uuid
+  make         String    @db.VarChar(30)
+  model        String    @db.VarChar(30)
+  color        String    @db.VarChar(20)
+  year         Int
+  /// Passenger seats the car can offer (driver excluded).
+  seats        Int
+  /// "ا ب ج" — Arabic letters separated by single spaces.
+  plateLetters String    @map("plate_letters") @db.VarChar(8)
+  plateDigits  String    @map("plate_digits") @db.VarChar(4)
+  isActive     Boolean   @default(true) @map("is_active")
+  verifiedAt   DateTime? @map("verified_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  owner User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  rides Ride[]
+
+  @@index([ownerId])
+  @@map("vehicles")
+}
+
+/// One trip a driver offers. Seat counts are kept in step with active bookings
+/// inside the same transaction; see RidesService / BookingsService.
+model Ride {
+  id                    String      @id @default(uuid()) @db.Uuid
+  driverId              String      @map("driver_id") @db.Uuid
+  vehicleId             String      @map("vehicle_id") @db.Uuid
+  status                RideStatus  @default(SCHEDULED)
+  departureAt           DateTime    @map("departure_at") @db.Timestamptz(3)
+  originLocationId      String?     @map("origin_location_id") @db.Uuid
+  originNameEn          String      @map("origin_name_en") @db.VarChar(120)
+  originNameAr          String      @map("origin_name_ar") @db.VarChar(120)
+  originLat             Float       @map("origin_lat")
+  originLng             Float       @map("origin_lng")
+  destinationLocationId String?     @map("destination_location_id") @db.Uuid
+  destinationNameEn     String      @map("destination_name_en") @db.VarChar(120)
+  destinationNameAr     String      @map("destination_name_ar") @db.VarChar(120)
+  destinationLat        Float       @map("destination_lat")
+  destinationLng        Float       @map("destination_lng")
+  /// Straight-line distance, used for price limits.
+  distanceKm            Float       @map("distance_km")
+  seatsTotal            Int         @map("seats_total")
+  seatsAvailable        Int         @map("seats_available")
+  pricePerSeatPiasters  Int         @map("price_per_seat_piasters")
+  bookingMode           BookingMode @default(INSTANT) @map("booking_mode")
+  womenOnly             Boolean     @default(false) @map("women_only")
+  notes                 String?     @db.VarChar(280)
+  prefQuiet             Boolean     @default(false) @map("pref_quiet")
+  prefMusicOk           Boolean     @default(true) @map("pref_music_ok")
+  prefAc                Boolean     @default(true) @map("pref_ac")
+  prefSmokingOk         Boolean     @default(false) @map("pref_smoking_ok")
+  cancelledAt           DateTime?   @map("cancelled_at")
+  cancelReason          String?     @map("cancel_reason") @db.VarChar(200)
+  completedAt           DateTime?   @map("completed_at")
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+
+  driver      User      @relation(fields: [driverId], references: [id])
+  vehicle     Vehicle   @relation(fields: [vehicleId], references: [id])
+  origin      Location? @relation("RideOrigin", fields: [originLocationId], references: [id], onDelete: SetNull)
+  destination Location? @relation("RideDestination", fields: [destinationLocationId], references: [id], onDelete: SetNull)
+  bookings    Booking[]
+
+  @@index([status, departureAt])
+  @@index([driverId, departureAt])
+  @@map("rides")
+}
+
+/// A passenger's seats on a ride. PENDING and CONFIRMED bookings hold seats.
+model Booking {
+  id                   String        @id @default(uuid()) @db.Uuid
+  rideId               String        @map("ride_id") @db.Uuid
+  passengerId          String        @map("passenger_id") @db.Uuid
+  status               BookingStatus
+  seats                Int
+  /// Price at the time of booking; later price edits never change it.
+  pricePerSeatPiasters Int           @map("price_per_seat_piasters")
+  totalPiasters        Int           @map("total_piasters")
+  paymentMethod        PaymentMethod @default(CASH) @map("payment_method")
+  pickupNote           String?       @map("pickup_note") @db.VarChar(140)
+  /// Client-supplied key so a retried request never creates a second booking.
+  idempotencyKey       String?       @map("idempotency_key") @db.VarChar(64)
+  expiresAt            DateTime?     @map("expires_at") @db.Timestamptz(3)
+  decidedAt            DateTime?     @map("decided_at")
+  cancelledAt          DateTime?     @map("cancelled_at")
+  cancelReason         String?       @map("cancel_reason") @db.VarChar(200)
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+
+  ride      Ride       @relation(fields: [rideId], references: [id])
+  passenger User       @relation(fields: [passengerId], references: [id])
+  messages  Message[]
+  chatReads ChatRead[]
+
+  @@unique([passengerId, idempotencyKey])
+  @@index([rideId, status])
+  @@index([passengerId, status])
+  @@index([status, expiresAt])
+  @@map("bookings")
+}
+
+// ---------- Messaging & notifications ----------
+
+/// In-app inbox. Created in the same transaction as the event it reports.
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  rideId    String?          @map("ride_id") @db.Uuid
+  bookingId String?          @map("booking_id") @db.Uuid
+  /// Template values (display name, place names, departure time). Never phone numbers.
+  data      Json             @default("{}")
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+/// An Expo push token for one of the user's devices.
+model PushDevice {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  token      String    @unique @db.VarChar(200)
+  platform   String    @db.VarChar(10)
+  disabledAt DateTime? @map("disabled_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_devices")
+}
+
+/// One private thread per booking: the ride's driver and that passenger.
+model Message {
+  id        String   @id @default(uuid()) @db.Uuid
+  bookingId String   @map("booking_id") @db.Uuid
+  senderId  String   @map("sender_id") @db.Uuid
+  body      String   @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  sender  User    @relation(fields: [senderId], references: [id])
+
+  @@index([bookingId, createdAt])
+  @@map("messages")
+}
+
+/// How far each participant has read a booking's thread.
+model ChatRead {
+  bookingId  String   @map("booking_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  lastReadAt DateTime @map("last_read_at") @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([bookingId, userId])
+  @@map("chat_reads")
+}
+
+// ---------- Administration ----------
+
+model AdminUser {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique @db.VarChar(254)
+  name         String    @db.VarChar(80)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  role         AdminRole
+  disabledAt   DateTime? @map("disabled_at")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("admin_users")
+}
+
+/// Append-only record of security- and money-relevant actions.
+model AuditLog {
+  id         BigInt    @id @default(autoincrement())
+  actorType  ActorType @map("actor_type")
+  actorId    String?   @map("actor_id") @db.Uuid
+  action     String    @db.VarChar(80)
+  entityType String?   @map("entity_type") @db.VarChar(60)
+  entityId   String?   @map("entity_id") @db.VarChar(64)
+  metadata   Json?
+  ip         String?   @db.VarChar(64)
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([actorType, actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
