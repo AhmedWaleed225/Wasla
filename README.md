@@ -65,6 +65,10 @@ Edit `apps/api/.env` and replace both `replace-with-…` secrets. Generate each 
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
 
+Third-party providers (SMS, Paymob/Fawry, Google Maps, S3 storage, Expo push) have empty
+placeholders at the bottom of `apps/api/.env.example` and `apps/mobile/.env.example`. Leave them empty
+for local development; nothing reads them until each integration is built (Phase 4B).
+
 Build the shared package, create the database tables and load development data:
 
 ```bash
