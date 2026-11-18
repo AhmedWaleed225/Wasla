@@ -1,5 +1,17 @@
 import type {
+  BookingDto,
+  CancelInput,
+  CreateBookingInput,
+  CreateRideInput,
   CreateProfileInput,
+  ListScope,
+  RideDetailDto,
+  RideSearchInput,
+  RideSearchResultDto,
+  RideSummaryDto,
+  UpdateRideInput,
+  VehicleDto,
+  VehicleInput,
   LocationDto,
   MeDto,
   RequestOtpResultDto,
@@ -33,4 +45,33 @@ export const locationsApi = {
   saved: () => api<SavedLocationDto[]>('/me/saved-locations'),
   save: (input: SavedLocationInput) => api<SavedLocationDto>('/me/saved-locations', { method: 'POST', body: input }),
   remove: (id: string) => api<void>(`/me/saved-locations/${id}`, { method: 'DELETE' }),
+};
+
+export const vehiclesApi = {
+  list: () => api<VehicleDto[]>('/me/vehicles'),
+  add: (input: VehicleInput) => api<VehicleDto>('/me/vehicles', { method: 'POST', body: input }),
+  update: (id: string, input: VehicleInput) => api<VehicleDto>(`/me/vehicles/${id}`, { method: 'PUT', body: input }),
+  remove: (id: string) => api<void>(`/me/vehicles/${id}`, { method: 'DELETE' }),
+};
+
+export const ridesApi = {
+  search: (q: RideSearchInput) =>
+    api<RideSearchResultDto>('/rides/search', { query: q as Record<string, string | number | undefined> }),
+  publish: (input: CreateRideInput) => api<RideDetailDto>('/rides', { method: 'POST', body: input }),
+  get: (id: string) => api<RideDetailDto>(`/rides/${id}`),
+  update: (id: string, input: UpdateRideInput) => api<RideDetailDto>(`/rides/${id}`, { method: 'PATCH', body: input }),
+  cancel: (id: string, input: CancelInput = {}) => api<RideDetailDto>(`/rides/${id}/cancel`, { method: 'POST', body: input }),
+  complete: (id: string) => api<RideDetailDto>(`/rides/${id}/complete`, { method: 'POST' }),
+  mine: (scope: ListScope) => api<RideSummaryDto[]>('/me/rides', { query: { scope } }),
+};
+
+export const bookingsApi = {
+  /** `idempotencyKey` stays the same for every retry of one booking attempt. */
+  create: (rideId: string, input: CreateBookingInput, idempotencyKey: string) =>
+    api<BookingDto>(`/rides/${rideId}/bookings`, { method: 'POST', body: input, headers: { 'Idempotency-Key': idempotencyKey } }),
+  mine: (scope: ListScope) => api<BookingDto[]>('/me/bookings', { query: { scope } }),
+  get: (id: string) => api<BookingDto>(`/bookings/${id}`),
+  cancel: (id: string, input: CancelInput = {}) => api<BookingDto>(`/bookings/${id}/cancel`, { method: 'POST', body: input }),
+  accept: (id: string) => api<BookingDto>(`/bookings/${id}/accept`, { method: 'POST' }),
+  decline: (id: string) => api<BookingDto>(`/bookings/${id}/decline`, { method: 'POST' }),
 };

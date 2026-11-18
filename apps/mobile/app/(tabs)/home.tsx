@@ -3,10 +3,11 @@ import type { LocationDto, UserRole } from '@wasla/shared';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import { meApi } from '../../src/api/endpoints';
 import { Icon } from '../../src/components/Icon';
 import { Screen } from '../../src/components/Screen';
+import { SearchCard } from '../../src/components/SearchCard';
 import { Avatar, Button, Card, Chip, Notice, Segmented, T } from '../../src/components/ui';
 import { usePlaceName, useSavedPlaces } from '../../src/hooks/useSavedPlaces';
 import { useAuth } from '../../src/stores/auth';
@@ -18,32 +19,11 @@ function greetingKey() {
   return h < 12 ? 'home.greetingMorning' : h < 18 ? 'home.greetingAfternoon' : 'home.greetingEvening';
 }
 
-function PlaceSlot({ label, placeholder, value, onPress, dot }: { label: string; placeholder: string; value: string | null; onPress: () => void; dot: 'from' | 'to' }) {
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${value ?? placeholder}`} onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 }}>
-      <View
-        style={{
-          width: 12,
-          height: 12,
-          borderRadius: 6,
-          borderWidth: 3,
-          borderColor: dot === 'from' ? colors.primary : colors.accent,
-          backgroundColor: dot === 'from' ? '#fff' : colors.accent,
-        }}
-      />
-      <View style={{ flex: 1 }}>
-        <T variant="caption" muted>{label}</T>
-        <T weight={600} color={value ? colors.text : colors.placeholder} numberOfLines={1}>{value ?? placeholder}</T>
-      </View>
-    </Pressable>
-  );
-}
-
 export default function Home() {
   const { t } = useTranslation();
   const me = useAuth((s) => s.me)!;
   const setMe = useAuth((s) => s.setMe);
-  const { from, to, set, swap } = useTripDraft();
+  const { from, to, set } = useTripDraft();
   const { data: saved } = useSavedPlaces();
   const names = usePlaceName();
   const isDriver = me.activeRole === 'DRIVER';
@@ -83,9 +63,6 @@ export default function Home() {
     switchRole.mutate(role);
   };
 
-  const pick = (field: 'from' | 'to') => router.push({ pathname: '/location-search', params: { purpose: field } });
-  const fromName = from ? names.name(from) : null;
-  const toName = to ? names.name(to) : null;
 
   return (
     <Screen>
@@ -118,22 +95,17 @@ export default function Home() {
           {enableDriving.error ? <Notice tone="error" icon="close" text={enableDriving.error.message} /> : null}
         </Card>
       ) : isDriver ? (
-        <Notice tone="warn" icon="car" text={t('home.driverPending')} />
-      ) : (
-        <Card style={{ paddingTop: 6, gap: 4 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <View style={{ flex: 1 }}>
-              <PlaceSlot label={t('home.from')} placeholder={t('home.choosePickup')} value={fromName} onPress={() => pick('from')} dot="from" />
-              <View style={{ height: 1, backgroundColor: colors.line, marginStart: 24 }} />
-              <PlaceSlot label={t('home.to')} placeholder={t('home.chooseDestination')} value={toName} onPress={() => pick('to')} dot="to" />
-            </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Swap" onPress={swap} hitSlop={6} style={{ width: 40, height: 40, borderRadius: 12, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="swap" />
-            </Pressable>
+        <Card style={{ gap: 12 }}>
+          <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+            <Icon name="car" color={colors.primary} />
+            <T variant="h3" style={{ flex: 1 }}>{t('home.driverPending')}</T>
           </View>
-          <Button title={t('home.searchRides')} icon="search" disabled style={{ marginTop: 8 }} />
-          <T variant="caption" muted style={{ textAlign: 'center' }}>{t('home.searchSoon')}</T>
+          <T variant="meta" color={colors.textTertiary}>{t('home.driverHint')}</T>
+          <Button title={t('home.offerCta')} icon="plus" onPress={() => router.push('/explore')} />
+          <Button title={t('home.myRides')} kind="secondary" icon="calendar" onPress={() => router.push('/trips')} />
         </Card>
+      ) : (
+        <SearchCard />
       )}
 
       {!isDriver && saved && saved.length > 0 ? (

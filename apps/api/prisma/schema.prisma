@@ -1,6 +1,6 @@
 // Wasla database schema.
-// Phase 2 covers identity, sessions, locations and audit. Rides, bookings,
-// payments, messaging and safety tables arrive in later migrations.
+// Phase 2: identity, sessions, locations, audit. Phase 3: vehicles, rides, bookings.
+// Payments, messaging and safety tables arrive in later migrations.
 // Enum values mirror packages/shared/src/enums.ts.
 
 generator client {
@@ -59,6 +59,31 @@ enum SavedLocationLabel {
   OTHER
 }
 
+enum RideStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+enum BookingMode {
+  INSTANT
+  REQUEST
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  DECLINED
+  CANCELLED_BY_PASSENGER
+  CANCELLED_BY_DRIVER
+  EXPIRED
+  COMPLETED
+}
+
+enum PaymentMethod {
+  CASH
+}
+
 enum AdminRole {
   SUPER_ADMIN
   OPERATIONS
@@ -93,6 +118,9 @@ model User {
   profile        UserProfile?
   sessions       Session[]
   savedLocations SavedLocation[]
+  vehicles       Vehicle[]
+  ridesDriven    Ride[]
+  bookings       Booking[]
 
   @@index([status])
   @@map("users")
@@ -180,9 +208,11 @@ model Location {
   createdAt  DateTime     @default(now()) @map("created_at")
   updatedAt  DateTime     @updatedAt @map("updated_at")
 
-  parent         Location?       @relation("LocationTree", fields: [parentId], references: [id])
-  children       Location[]      @relation("LocationTree")
-  savedLocations SavedLocation[]
+  parent           Location?       @relation("LocationTree", fields: [parentId], references: [id])
+  children         Location[]      @relation("LocationTree")
+  savedLocations   SavedLocation[]
+  ridesFrom        Ride[]          @relation("RideOrigin")
+  ridesTo          Ride[]          @relation("RideDestination")
 
   @@index([kind])
   @@index([parentId])
@@ -206,6 +236,111 @@ model SavedLocation {
 
   @@index([userId])
   @@map("saved_locations")
+}
+
+// ---------- Rides ----------
+
+/// A driver's car. Verification (licence, registration) arrives in Phase 5.
+model Vehicle {
+  id           String    @id @default(uuid()) @db.Uuid
+  ownerId      String    @map("owner_id") @db.Uuid
+  make         String    @db.VarChar(30)
+  model        String    @db.VarChar(30)
+  color        String    @db.VarChar(20)
+  year         Int
+  /// Passenger seats the car can offer (driver excluded).
+  seats        Int
+  /// "ا ب ج" — Arabic letters separated by single spaces.
+  plateLetters String    @map("plate_letters") @db.VarChar(8)
+  plateDigits  String    @map("plate_digits") @db.VarChar(4)
+  isActive     Boolean   @default(true) @map("is_active")
+  verifiedAt   DateTime? @map("verified_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  owner User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  rides Ride[]
+
+  @@index([ownerId])
+  @@map("vehicles")
+}
+
+/// One trip a driver offers. Seat counts are kept in step with active bookings
+/// inside the same transaction; see RidesService / BookingsService.
+model Ride {
+  id                    String      @id @default(uuid()) @db.Uuid
+  driverId              String      @map("driver_id") @db.Uuid
+  vehicleId             String      @map("vehicle_id") @db.Uuid
+  status                RideStatus  @default(SCHEDULED)
+  departureAt           DateTime    @map("departure_at") @db.Timestamptz(3)
+  originLocationId      String?     @map("origin_location_id") @db.Uuid
+  originNameEn          String      @map("origin_name_en") @db.VarChar(120)
+  originNameAr          String      @map("origin_name_ar") @db.VarChar(120)
+  originLat             Float       @map("origin_lat")
+  originLng             Float       @map("origin_lng")
+  destinationLocationId String?     @map("destination_location_id") @db.Uuid
+  destinationNameEn     String      @map("destination_name_en") @db.VarChar(120)
+  destinationNameAr     String      @map("destination_name_ar") @db.VarChar(120)
+  destinationLat        Float       @map("destination_lat")
+  destinationLng        Float       @map("destination_lng")
+  /// Straight-line distance, used for price limits.
+  distanceKm            Float       @map("distance_km")
+  seatsTotal            Int         @map("seats_total")
+  seatsAvailable        Int         @map("seats_available")
+  pricePerSeatPiasters  Int         @map("price_per_seat_piasters")
+  bookingMode           BookingMode @default(INSTANT) @map("booking_mode")
+  womenOnly             Boolean     @default(false) @map("women_only")
+  notes                 String?     @db.VarChar(280)
+  prefQuiet             Boolean     @default(false) @map("pref_quiet")
+  prefMusicOk           Boolean     @default(true) @map("pref_music_ok")
+  prefAc                Boolean     @default(true) @map("pref_ac")
+  prefSmokingOk         Boolean     @default(false) @map("pref_smoking_ok")
+  cancelledAt           DateTime?   @map("cancelled_at")
+  cancelReason          String?     @map("cancel_reason") @db.VarChar(200)
+  completedAt           DateTime?   @map("completed_at")
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+
+  driver      User      @relation(fields: [driverId], references: [id])
+  vehicle     Vehicle   @relation(fields: [vehicleId], references: [id])
+  origin      Location? @relation("RideOrigin", fields: [originLocationId], references: [id], onDelete: SetNull)
+  destination Location? @relation("RideDestination", fields: [destinationLocationId], references: [id], onDelete: SetNull)
+  bookings    Booking[]
+
+  @@index([status, departureAt])
+  @@index([driverId, departureAt])
+  @@map("rides")
+}
+
+/// A passenger's seats on a ride. PENDING and CONFIRMED bookings hold seats.
+model Booking {
+  id                   String        @id @default(uuid()) @db.Uuid
+  rideId               String        @map("ride_id") @db.Uuid
+  passengerId          String        @map("passenger_id") @db.Uuid
+  status               BookingStatus
+  seats                Int
+  /// Price at the time of booking; later price edits never change it.
+  pricePerSeatPiasters Int           @map("price_per_seat_piasters")
+  totalPiasters        Int           @map("total_piasters")
+  paymentMethod        PaymentMethod @default(CASH) @map("payment_method")
+  pickupNote           String?       @map("pickup_note") @db.VarChar(140)
+  /// Client-supplied key so a retried request never creates a second booking.
+  idempotencyKey       String?       @map("idempotency_key") @db.VarChar(64)
+  expiresAt            DateTime?     @map("expires_at") @db.Timestamptz(3)
+  decidedAt            DateTime?     @map("decided_at")
+  cancelledAt          DateTime?     @map("cancelled_at")
+  cancelReason         String?       @map("cancel_reason") @db.VarChar(200)
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+
+  ride      Ride @relation(fields: [rideId], references: [id])
+  passenger User @relation(fields: [passengerId], references: [id])
+
+  @@unique([passengerId, idempotencyKey])
+  @@index([rideId, status])
+  @@index([passengerId, status])
+  @@index([status, expiresAt])
+  @@map("bookings")
 }
 
 // ---------- Administration ----------

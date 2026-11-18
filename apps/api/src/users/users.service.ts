@@ -3,17 +3,11 @@ import type { User, UserProfile, UserRole } from '@prisma/client';
 import type { CreateProfileInput, MeDto, ProfileDto, UpdateProfileInput } from '@wasla/shared';
 import { badRequest, conflict, forbidden, notFound } from '../common/app-exception';
 import { AuditService } from '../audit/audit.service';
+import { completedCounts } from '../rides/ride-mapper';
 import { PrismaService } from '../prisma/prisma.service';
 
-/** "Nour El-Sayed" -> "Nour E." (privacy default). */
-export function displayNameOf(fullName: string, showFullLastName: boolean): string {
-  const parts = fullName.trim().split(/\s+/);
-  if (showFullLastName || parts.length < 2) return fullName.trim();
-  const last = parts[parts.length - 1]!;
-  // Arabic family names usually start with the article "ال": "السيد" -> "س."
-  const initial = last.startsWith('ال') && last.length > 2 ? last.charAt(2) : last.charAt(0).toUpperCase();
-  return `${parts[0]} ${initial}.`;
-}
+export { displayNameOf } from './display-name';
+import { displayNameOf } from './display-name';
 
 function toProfileDto(p: UserProfile): ProfileDto {
   return {
@@ -46,7 +40,7 @@ export class UsersService {
     private readonly audit: AuditService,
   ) {}
 
-  private toMe(user: User & { profile: UserProfile | null }): MeDto {
+  private toMe(user: User & { profile: UserProfile | null }, ridesCompleted: number): MeDto {
     return {
       id: user.id,
       phone: user.phoneE164,
@@ -56,15 +50,16 @@ export class UsersService {
       status: user.status,
       createdAt: user.createdAt.toISOString(),
       profile: user.profile ? toProfileDto(user.profile) : null,
-      // Rides and ratings tables arrive in Phase 3; until then these are genuinely zero.
-      stats: { ridesCompleted: 0, ratingAverage: null, ratingCount: 0 },
+      // Ratings arrive in Phase 5.
+      stats: { ridesCompleted, ratingAverage: null, ratingCount: 0 },
     };
   }
 
   async getMe(userId: string): Promise<MeDto> {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { profile: true } });
     if (!user) throw notFound();
-    return this.toMe(user);
+    const counts = await completedCounts(this.prisma, [userId]);
+    return this.toMe(user, counts.get(userId) ?? 0);
   }
 
   async createProfile(userId: string, input: CreateProfileInput): Promise<MeDto> {

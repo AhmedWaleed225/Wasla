@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { GENDERS, LOCALES, LOCATION_KINDS, SAVED_LOCATION_LABELS, USER_ROLES } from './enums';
-import { normalizeEgyptianMobile } from './phone';
+import { BOOKING_MODES, GENDERS, LOCALES, LOCATION_KINDS, SAVED_LOCATION_LABELS, USER_ROLES } from './enums';
+import { normalizeEgyptianMobile, toAsciiDigits } from './phone';
+import { PLATE_DIGITS_RE, PLATE_LETTERS_RE, RIDE_RULES, SEARCH_RULES, normalizePlateLetters } from './rides';
 
 /** Minimum age to use Wasla. */
 export const MIN_AGE_YEARS = 18;
@@ -133,3 +134,132 @@ export const savedLocationSchema = z
   .refine((v) => v.locationId || (v.lat !== undefined && v.lng !== undefined), 'LOCATION_REQUIRED')
   .refine((v) => v.label !== 'OTHER' || !!v.customName, 'LOCATION_NAME_REQUIRED');
 export type SavedLocationInput = z.infer<typeof savedLocationSchema>;
+
+// ---------- Vehicles ----------
+
+const currentYear = () => new Date().getUTCFullYear();
+
+export const vehicleSchema = z.object({
+  make: z.string().trim().min(2, 'VEHICLE_FIELD_LENGTH').max(30, 'VEHICLE_FIELD_LENGTH'),
+  model: z.string().trim().min(1, 'VEHICLE_FIELD_LENGTH').max(30, 'VEHICLE_FIELD_LENGTH'),
+  color: z.string().trim().min(2, 'VEHICLE_FIELD_LENGTH').max(20, 'VEHICLE_FIELD_LENGTH'),
+  year: z.coerce
+    .number()
+    .int()
+    .refine((y) => y >= 1990 && y <= currentYear() + 1, 'VEHICLE_YEAR_RANGE'),
+  seats: z.coerce.number().int().min(1, 'VEHICLE_SEATS_RANGE').max(RIDE_RULES.maxSeats, 'VEHICLE_SEATS_RANGE'),
+  plateLetters: z
+    .string()
+    .trim()
+    .transform(normalizePlateLetters)
+    .refine((v) => PLATE_LETTERS_RE.test(v), 'VEHICLE_PLATE_FORMAT'),
+  plateDigits: z
+    .string()
+    .trim()
+    .transform((v) => toAsciiDigits(v).replace(/\s+/g, ''))
+    .refine((v) => PLATE_DIGITS_RE.test(v), 'VEHICLE_PLATE_FORMAT'),
+});
+export type VehicleInput = z.input<typeof vehicleSchema>;
+export type VehicleData = z.output<typeof vehicleSchema>;
+
+// ---------- Rides ----------
+
+/** A pickup or drop-off point: a known place, or a pin with a short label. */
+export const placePointSchema = z
+  .object({
+    locationId: z.string().uuid().optional(),
+    lat: latitude.optional(),
+    lng: longitude.optional(),
+    label: z.string().trim().min(1).max(80).optional(),
+  })
+  .refine((v) => v.locationId || (v.lat !== undefined && v.lng !== undefined && v.label), 'LOCATION_REQUIRED');
+export type PlacePointInput = z.infer<typeof placePointSchema>;
+
+const isoDateTime = z.string().datetime({ offset: true, message: 'RIDE_DEPARTURE_FORMAT' });
+
+export const createRideSchema = z.object({
+  vehicleId: z.string().uuid(),
+  origin: placePointSchema,
+  destination: placePointSchema,
+  departureAt: isoDateTime,
+  seats: z.coerce.number().int().min(1, 'VEHICLE_SEATS_RANGE').max(RIDE_RULES.maxSeats, 'VEHICLE_SEATS_RANGE'),
+  pricePerSeatEgp: z.coerce.number().int('RIDE_PRICE_WHOLE').min(1, 'RIDE_PRICE_TOO_LOW'),
+  bookingMode: z.enum(BOOKING_MODES as [string, ...string[]]).default('INSTANT'),
+  womenOnly: z.boolean().default(false),
+  notes: z.string().trim().max(RIDE_RULES.notesMax).optional(),
+  preferences: ridePreferencesSchema.partial().optional(),
+});
+export type CreateRideInput = z.input<typeof createRideSchema>;
+export type CreateRideData = z.output<typeof createRideSchema>;
+
+export const updateRideSchema = z
+  .object({
+    seats: z.coerce.number().int().min(1, 'VEHICLE_SEATS_RANGE').max(RIDE_RULES.maxSeats, 'VEHICLE_SEATS_RANGE'),
+    pricePerSeatEgp: z.coerce.number().int('RIDE_PRICE_WHOLE').min(1, 'RIDE_PRICE_TOO_LOW'),
+    departureAt: isoDateTime,
+    notes: z.string().trim().max(RIDE_RULES.notesMax).nullable(),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'VALIDATION_EMPTY_UPDATE');
+export type UpdateRideInput = z.infer<typeof updateRideSchema>;
+
+export const cancelSchema = z.object({
+  reason: z.string().trim().max(200).optional(),
+});
+export type CancelInput = z.infer<typeof cancelSchema>;
+
+const calendarDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'SEARCH_DATE_FORMAT')
+  .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), 'SEARCH_DATE_FORMAT');
+
+/**
+ * Ride search. Each end is a known place id or a lat/lng pair.
+ * `date` is a calendar day in Egypt (Africa/Cairo).
+ */
+export const rideSearchSchema = z
+  .object({
+    fromLocationId: z.string().uuid().optional(),
+    fromLat: z.coerce.number().min(21.5).max(31.8).optional(),
+    fromLng: z.coerce.number().min(24.6).max(37.0).optional(),
+    toLocationId: z.string().uuid().optional(),
+    toLat: z.coerce.number().min(21.5).max(31.8).optional(),
+    toLng: z.coerce.number().min(24.6).max(37.0).optional(),
+    date: calendarDate,
+    seats: z.coerce.number().int().min(1).max(RIDE_RULES.maxSeatsPerBooking).default(1),
+    radiusKm: z.coerce.number().min(1).max(SEARCH_RULES.maxRadiusKm).default(SEARCH_RULES.defaultRadiusKm),
+  })
+  .refine((v) => v.fromLocationId || (v.fromLat !== undefined && v.fromLng !== undefined), {
+    message: 'SEARCH_PLACE_REQUIRED',
+    path: ['from'],
+  })
+  .refine((v) => v.toLocationId || (v.toLat !== undefined && v.toLng !== undefined), {
+    message: 'SEARCH_PLACE_REQUIRED',
+    path: ['to'],
+  });
+export type RideSearchInput = z.input<typeof rideSearchSchema>;
+export type RideSearchQuery = z.output<typeof rideSearchSchema>;
+
+export const listScopeSchema = z.object({
+  scope: z.enum(['upcoming', 'past']).default('upcoming'),
+});
+export type ListScopeInput = z.input<typeof listScopeSchema>;
+
+// ---------- Bookings ----------
+
+export const createBookingSchema = z.object({
+  seats: z.coerce
+    .number()
+    .int()
+    .min(1, 'BOOKING_SEATS_LIMIT')
+    .max(RIDE_RULES.maxSeatsPerBooking, 'BOOKING_SEATS_LIMIT')
+    .default(1),
+  pickupNote: z.string().trim().max(140).optional(),
+});
+export type CreateBookingInput = z.input<typeof createBookingSchema>;
+
+/** Clients send a fresh random key per booking attempt so a retried request never books twice. */
+export const idempotencyKeySchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9_-]{8,64}$/, 'IDEMPOTENCY_KEY_FORMAT');

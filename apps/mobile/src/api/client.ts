@@ -74,6 +74,7 @@ interface RequestOptions {
   body?: unknown;
   query?: Record<string, string | number | undefined>;
   auth?: boolean;
+  headers?: Record<string, string>;
 }
 
 export async function api<T>(path: string, opts: RequestOptions = {}, retried = false): Promise<T> {
@@ -97,6 +98,7 @@ export async function api<T>(path: string, opts: RequestOptions = {}, retried = 
         'Accept-Language': lang,
         ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...(opts.auth !== false && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...opts.headers,
       },
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     });

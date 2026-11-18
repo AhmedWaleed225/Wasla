@@ -1,13 +1,18 @@
 import { useTranslation } from 'react-i18next';
-import { ComingSoon } from '../../src/components/ComingSoon';
+import { OfferForm } from '../../src/components/OfferForm';
+import { Screen } from '../../src/components/Screen';
+import { SearchCard } from '../../src/components/SearchCard';
+import { T } from '../../src/components/ui';
 import { useAuth } from '../../src/stores/auth';
 
+/** Driver mode: publish a ride. Passenger mode: search for one. */
 export default function Explore() {
   const { t } = useTranslation();
   const driver = useAuth((s) => s.me?.activeRole === 'DRIVER');
-  return driver ? (
-    <ComingSoon title={t('tabs.offer')} body={t('home.driverPending')} icon="car" />
-  ) : (
-    <ComingSoon title={t('tabs.explore')} body={t('comingSoon.explore')} icon="search" />
+  return (
+    <Screen>
+      <T variant="h1" accessibilityRole="header">{driver ? t('offer.title') : t('search.title')}</T>
+      {driver ? <OfferForm /> : <SearchCard />}
+    </Screen>
   );
 }

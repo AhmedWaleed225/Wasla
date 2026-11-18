@@ -68,6 +68,13 @@ const ICONS = {
     </>
   ),
   plus: <Path d="M12 5v14M5 12h14" />,
+  minus: <Path d="M5 12h14" />,
+  clock: (
+    <>
+      <Circle cx={12} cy={12} r={9} />
+      <Path d="M12 7v5l3 2" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof ICONS;

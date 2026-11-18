@@ -1,6 +1,7 @@
 export * from './enums';
 export * from './phone';
 export * from './schemas';
+export * from './rides';
 export * from './errors';
 export * from './tokens';
 export * from './api-types';

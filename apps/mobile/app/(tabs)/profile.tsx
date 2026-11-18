@@ -44,6 +44,12 @@ export default function Profile() {
         <Row icon="user" title={t('profile.personalInfo')} onPress={() => router.push('/edit-profile')} />
         <Divider />
         <Row icon="pin" title={t('profile.savedPlaces')} onPress={() => router.push('/saved-places')} />
+        {me.roles.includes('DRIVER') ? (
+          <>
+            <Divider />
+            <Row icon="car" title={t('vehicle.myCars')} onPress={() => router.push('/vehicles')} />
+          </>
+        ) : null}
         <Divider />
         <Row icon="gear" title={t('profile.settings')} onPress={() => router.push('/settings')} />
       </Card>

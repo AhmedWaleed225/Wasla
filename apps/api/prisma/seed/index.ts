@@ -11,6 +11,7 @@
  */
 import { randomBytes, scryptSync } from 'node:crypto';
 import { PrismaClient, type Prisma } from '@prisma/client';
+import { distanceKm, priceLimitsEgp } from '@wasla/shared';
 import { SEED_PLACES } from './locations';
 
 const prisma = new PrismaClient();
@@ -124,6 +125,71 @@ async function seedAdmin() {
   console.log(`  admin: ${email}`);
 }
 
+
+/**
+ * A car each for the two seeded drivers and a few rides over the next two days,
+ * so the app has something to find. Skipped if they already have upcoming rides.
+ */
+async function seedRides(ids: Map<string, string>) {
+  const plan = [
+    {
+      phone: '+201000000002',
+      car: { make: 'Hyundai', model: 'Elantra', color: 'Silver', year: 2019, seats: 3, plateLetters: 'م ص ر', plateDigits: '2025' },
+      rides: [
+        { from: 'giza.smart-village.b2', to: 'cairo.new-cairo.cfc.gate-4', inHours: 20, mode: 'INSTANT' as const },
+        { from: 'cairo.new-cairo.cfc.gate-4', to: 'giza.smart-village.b2', inHours: 30, mode: 'INSTANT' as const },
+      ],
+    },
+    {
+      phone: '+201000000003',
+      car: { make: 'Kia', model: 'Cerato', color: 'White', year: 2021, seats: 4, plateLetters: 'ق ه ر', plateDigits: '7310' },
+      rides: [{ from: 'cairo.rehab.gate-13', to: 'cairo.downtown.tahrir', inHours: 22, mode: 'REQUEST' as const }],
+    },
+  ];
+  let created = 0;
+  for (const d of plan) {
+    const user = await prisma.user.findUniqueOrThrow({ where: { phoneE164: d.phone } });
+    const upcoming = await prisma.ride.count({ where: { driverId: user.id, status: 'SCHEDULED', departureAt: { gt: new Date() } } });
+    if (upcoming > 0) continue;
+    const car =
+      (await prisma.vehicle.findFirst({ where: { ownerId: user.id, plateLetters: d.car.plateLetters, plateDigits: d.car.plateDigits, isActive: true } })) ??
+      (await prisma.vehicle.create({ data: { ownerId: user.id, ...d.car } }));
+    for (const r of d.rides) {
+      const [from, to] = await Promise.all([
+        prisma.location.findUniqueOrThrow({ where: { id: ids.get(r.from)! } }),
+        prisma.location.findUniqueOrThrow({ where: { id: ids.get(r.to)! } }),
+      ]);
+      const km = distanceKm({ lat: from.lat!, lng: from.lng! }, { lat: to.lat!, lng: to.lng! });
+      const departureAt = new Date(Date.now() + r.inHours * 3_600_000);
+      departureAt.setMinutes(0, 0, 0);
+      await prisma.ride.create({
+        data: {
+          driverId: user.id,
+          vehicleId: car.id,
+          departureAt,
+          originLocationId: from.id,
+          originNameEn: from.nameEn,
+          originNameAr: from.nameAr,
+          originLat: from.lat!,
+          originLng: from.lng!,
+          destinationLocationId: to.id,
+          destinationNameEn: to.nameEn,
+          destinationNameAr: to.nameAr,
+          destinationLat: to.lat!,
+          destinationLng: to.lng!,
+          distanceKm: km,
+          seatsTotal: car.seats,
+          seatsAvailable: car.seats,
+          pricePerSeatPiasters: priceLimitsEgp(km).suggested * 100,
+          bookingMode: r.mode,
+        },
+      });
+      created += 1;
+    }
+  }
+  console.log(`  rides: ${created} created`);
+}
+
 async function main() {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('Refusing to seed development data with NODE_ENV=production');
@@ -133,6 +199,7 @@ async function main() {
   console.log(`  locations: ${ids.size}`);
   await seedUsers(ids);
   console.log(`  users: ${USERS.length}`);
+  await seedRides(ids);
   await seedAdmin();
 }
 

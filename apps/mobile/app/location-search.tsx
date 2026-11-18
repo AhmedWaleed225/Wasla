@@ -9,7 +9,7 @@ import { Icon, type IconName } from '../src/components/Icon';
 import { Screen } from '../src/components/Screen';
 import { Divider, Field, Notice, T } from '../src/components/ui';
 import { savedPlacesKey, usePlaceName } from '../src/hooks/useSavedPlaces';
-import { useTripDraft } from '../src/stores/trip-draft';
+import { DRAFT_FIELDS, useTripDraft, type DraftField } from '../src/stores/trip-draft';
 import { colors } from '../src/theme';
 
 const KIND_ICON: Record<string, IconName> = {
@@ -24,6 +24,7 @@ const KIND_ICON: Record<string, IconName> = {
 /**
  * Landmark search. `purpose` decides what happens on selection:
  *   from | to          -> fills the trip draft on Home
+ *   offerFrom | offerTo -> fills the driver's Offer form
  *   HOME | WORK | OTHER -> saves the place to the user's account
  */
 export default function LocationSearch() {
@@ -55,8 +56,8 @@ export default function LocationSearch() {
   });
 
   const choose = (loc: LocationDto) => {
-    if (purpose === 'from' || purpose === 'to') {
-      setDraft(purpose, loc);
+    if (DRAFT_FIELDS.includes(purpose as DraftField)) {
+      setDraft(purpose as DraftField, loc);
       router.back();
     } else {
       save.mutate(loc);

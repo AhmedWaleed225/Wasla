@@ -14,18 +14,22 @@ The approved design lives in the Wasla design canvas (Claude Design). Design tok
 
 ---
 
-## Status — Phase 2 (foundation)
+## Status — Phase 3 (core carpooling)
 
 | Area | State |
 |---|---|
 | Monorepo, Docker services, env templates | Done (MinIO is opt-in: `docker compose --profile storage up -d`) |
-| Database schema + first migration + Egyptian seed data | Done (27 governorates, ~60 places — coordinates approximate) |
+| Database schema, migrations, Egyptian seed data | Done (27 governorates, ~60 places — coordinates approximate) |
 | Phone + OTP sign-in, refresh-token rotation with reuse detection, logout | Done (mock OTP only) |
 | Profiles, privacy-safe display names, passenger/driver role switch (checked server-side) | Done |
 | Landmark search in Arabic and English, saved Home / Work / other places | Done |
-| Mobile: language choice + RTL, welcome, phone, OTP, profile setup, permissions, home with role switch, profile, edit profile, saved places, settings | Done |
-| Explore / My Trips / Messages tabs | Placeholder screens — Phase 3+ |
-| Ride search, publishing, booking, payments, chat, maps, verification, admin | Not started (Phases 3–5) |
+| Driver cars (Egyptian plates), publishing rides with cost-sharing price caps | Done |
+| Ride search by place or pin, Egyptian calendar day, radius, seats | Done |
+| Booking: instant or driver-approved, seat holds, expiry, cancellation, no overbooking | Done (cash only) |
+| Driver ride management: accept/decline, change seats, cancel, complete | Done |
+| Mobile: search, results, ride details, booking, Offer form, My Trips, cars | Done |
+| Messages tab | Placeholder — Phase 4 |
+| Maps, online payments, chat, notifications, ratings, verification, admin | Not started (Phases 4–5) |
 
 See **Known limitations** at the bottom.
 
@@ -107,7 +111,8 @@ Set `OTP_MOCK_FIXED_CODE=123456` in `apps/api/.env` if you prefer a fixed code l
 The API **refuses to start** with the mock provider, the mock switch or a fixed code when
 `NODE_ENV=production` (see `apps/api/src/config/env.ts` and its tests).
 
-Seeded test accounts (development database only):
+Seeded test accounts (development database only). Karim and Youssef also get a car and upcoming
+rides (Smart Village B2 ⇄ CFC Gate 4, Rehab Gate 13 → Tahrir) so search has results:
 
 | Phone | Name | Roles |
 |---|---|---|
@@ -137,8 +142,11 @@ pnpm --filter @wasla/api test:e2e
 They cover: phone validation and localized errors, sign-up vs log-in, OTP cooldown, the 5-attempt
 lock, single-use and expired codes, refresh-token rotation and stolen-token detection, logout,
 suspended accounts, profile rules (18+, one profile), roles that clients cannot grant themselves,
-landmark search (abbreviations, Arabic without hamza, Arabic-Indic digits), and owner-only access to
-saved places.
+landmark search (abbreviations, Arabic without hamza, Arabic-Indic digits), owner-only access to
+saved places, and for rides: publishing rules (lead time, seats, price caps, overlap, women-only),
+search matching, instant and request bookings, **8 passengers racing for 3 seats** (exactly 3 win),
+a passenger tapping "book" 5 times at once (one booking), idempotent retries, cancellations returning
+seats, request expiry, locked price/time once booked, ride cancellation and completion.
 
 ## Project layout
 
@@ -151,6 +159,7 @@ apps/api/
   src/auth/                       OTP, sessions, global auth guard
   src/users/                      profile, roles
   src/locations/                  landmark search, saved places
+  src/rides/                      cars, rides, search, bookings, request expiry
   src/common/                     error filter, Zod validation pipe
 apps/mobile/
   app/                            screens (Expo Router)
@@ -165,10 +174,31 @@ packages/shared/src/              schemas, errors, tokens, translations
 - All routes are under `/v1`. Every route needs `Authorization: Bearer <accessToken>` unless marked public.
 - Errors always look like `{ "error": { "code": "AUTH_OTP_INVALID", "message": "…" } }`. The message
   follows `Accept-Language` (`ar` default, `en`). Apps branch on `code`, never on `message`.
+- Money is in piasters (`pricePerSeatPiasters: 4500` = 45 EGP). Ride times are UTC ISO strings; search
+  `date` is an Egyptian calendar day.
+- `POST /v1/rides/:id/bookings` accepts an `Idempotency-Key` header: a retry with the same key returns
+  the original booking (200) instead of booking again (201).
 - Access tokens last 15 minutes. Refresh tokens rotate on every use; reusing an old one revokes the
   whole session family.
 
-## Known limitations (Phase 2)
+## Business rules (Phase 3)
+
+All enforced by the API; the numbers live in `packages/shared/src/rides.ts`.
+
+- Rides leave at least 30 minutes and at most 30 days from now; start and end at least 1 km apart.
+- A driver can't have two scheduled rides within an hour of each other.
+- Price per seat: 5 EGP minimum; maximum is the larger of 30 EGP or 2 EGP per road km (road ≈ 1.3 × straight
+  line). Suggested price ≈ 0.75 EGP per road km. These are **assumptions to confirm** with the business.
+- Women-only rides: only women drivers can offer them, only women see and book them.
+- 1–4 seats per booking; one active booking per passenger per ride.
+- Request-mode bookings hold their seats until the driver answers, for up to 12 hours (or until departure).
+- Once anyone has booked, the driver can't change the time or price, and can't offer fewer seats than are booked.
+- Passengers can cancel until departure. Drivers can cancel any open ride (all bookings are cancelled) and
+  mark it done after departure.
+- The car plate is shown only to the driver and to confirmed passengers. Others see a display name
+  ("Karim M."), never a phone number.
+
+## Known limitations
 
 - **SMS is not connected.** Only the mock OTP exists. A real provider (Twilio Verify, Infobip or an
   Egyptian SMS gateway) needs an account; it plugs in behind `OtpSender` in `src/auth/otp/`.
@@ -176,6 +206,14 @@ packages/shared/src/              schemas, errors, tokens, translations
 - **Seed coordinates are approximate.** Verify pickup-critical points (gates, stations) before launch.
 - **Profile photos** are not uploadable yet (object storage arrives in Phase 4); avatars show initials.
 - **Email login and account deletion** are not implemented yet.
-- **Driver mode** can be switched on, but publishing rides needs verification (Phases 3 and 5).
+- **No driver verification yet.** Anyone with driver mode on can add a car and publish. ID, licence and
+  car checks arrive in Phase 5 and must gate publishing before public launch.
+- **Cash only.** Online payment needs a real provider (Paymob, Fawry or similar) in Phase 4.
+- **No map yet.** Places are picked from the landmark list; pins and maps arrive in Phase 4.
+- **No notifications.** Drivers see new requests only when they open the ride; push notifications are Phase 4.
+- **One route per ride**: no intermediate stops yet. Search matches the ride's start and end only.
+- **Request expiry runs in-process** every minute; fine for one or several instances (each booking is
+  re-checked under a lock), but a dedicated job runner is better at scale.
+- Mobile date and time pickers are built in-app (no native picker) so the app runs in Expo Go.
 - **Changing language reloads the app.** React Native only applies a new layout direction on restart.
 - No mobile UI tests yet (planned for Phase 6).

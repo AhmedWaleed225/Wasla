@@ -11,6 +11,7 @@ import { ENV, type Env } from './config/env';
 import { HealthModule } from './health/health.controller';
 import { LocationsModule } from './locations/locations.module';
 import { PrismaModule } from './prisma/prisma.service';
+import { RidesModule } from './rides/rides.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -46,6 +47,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     AuthModule,
     LocationsModule,
+    RidesModule,
     HealthModule,
   ],
   providers: [
