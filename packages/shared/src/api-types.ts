@@ -4,6 +4,7 @@ import type {
   Gender,
   Locale,
   LocationKind,
+  NotificationType,
   PaymentMethod,
   RideStatus,
   SavedLocationLabel,
@@ -169,4 +170,52 @@ export interface RideSearchResultDto {
   /** Resolved search ends, so the app can show what was searched. */
   from: { lat: number; lng: number };
   to: { lat: number; lng: number };
+}
+
+// ---------- Messaging & notifications ----------
+
+export interface NotificationDto {
+  id: string;
+  type: NotificationType;
+  rideId: string | null;
+  bookingId: string | null;
+  /** Values for the message template: name, from, to, departureAt (ISO). */
+  data: { name?: string; fromEn?: string; fromAr?: string; toEn?: string; toAr?: string; departureAt?: string };
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface NotificationPageDto {
+  items: NotificationDto[];
+  unreadCount: number;
+  /** Pass as `before` to load older items; null when there are no more. */
+  nextBefore: string | null;
+}
+
+export interface MessageDto {
+  id: string;
+  bookingId: string;
+  senderId: string;
+  mine: boolean;
+  body: string;
+  createdAt: string;
+}
+
+export interface ConversationDto {
+  bookingId: string;
+  bookingStatus: BookingStatus;
+  /** Whether new messages can still be sent. */
+  open: boolean;
+  role: 'driver' | 'passenger';
+  other: PublicUserDto;
+  ride: { id: string; departureAt: string; origin: PlacePointDto; destination: PlacePointDto; status: RideStatus };
+  lastMessage: MessageDto | null;
+  unreadCount: number;
+}
+
+export interface MessagePageDto {
+  items: MessageDto[]; // oldest first
+  open: boolean;
+  /** The other person's last read time, for "seen" marks. */
+  otherReadAt: string | null;
 }

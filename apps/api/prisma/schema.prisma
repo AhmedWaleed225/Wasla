@@ -1,6 +1,6 @@
 // Wasla database schema.
 // Phase 2: identity, sessions, locations, audit. Phase 3: vehicles, rides, bookings.
-// Payments, messaging and safety tables arrive in later migrations.
+// Phase 4: notifications, push devices, booking chat. Payments and safety come later.
 // Enum values mirror packages/shared/src/enums.ts.
 
 generator client {
@@ -84,6 +84,17 @@ enum PaymentMethod {
   CASH
 }
 
+enum NotificationType {
+  BOOKING_REQUESTED
+  BOOKING_CONFIRMED
+  BOOKING_ACCEPTED
+  BOOKING_DECLINED
+  BOOKING_EXPIRED
+  BOOKING_CANCELLED
+  RIDE_CANCELLED
+  RIDE_COMPLETED
+}
+
 enum AdminRole {
   SUPER_ADMIN
   OPERATIONS
@@ -121,6 +132,10 @@ model User {
   vehicles       Vehicle[]
   ridesDriven    Ride[]
   bookings       Booking[]
+  notifications  Notification[]
+  pushDevices    PushDevice[]
+  messagesSent   Message[]
+  chatReads      ChatRead[]
 
   @@index([status])
   @@map("users")
@@ -333,14 +348,80 @@ model Booking {
   createdAt            DateTime      @default(now()) @map("created_at")
   updatedAt            DateTime      @updatedAt @map("updated_at")
 
-  ride      Ride @relation(fields: [rideId], references: [id])
-  passenger User @relation(fields: [passengerId], references: [id])
+  ride      Ride       @relation(fields: [rideId], references: [id])
+  passenger User       @relation(fields: [passengerId], references: [id])
+  messages  Message[]
+  chatReads ChatRead[]
 
   @@unique([passengerId, idempotencyKey])
   @@index([rideId, status])
   @@index([passengerId, status])
   @@index([status, expiresAt])
   @@map("bookings")
+}
+
+// ---------- Messaging & notifications ----------
+
+/// In-app inbox. Created in the same transaction as the event it reports.
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  rideId    String?          @map("ride_id") @db.Uuid
+  bookingId String?          @map("booking_id") @db.Uuid
+  /// Template values (display name, place names, departure time). Never phone numbers.
+  data      Json             @default("{}")
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+/// An Expo push token for one of the user's devices.
+model PushDevice {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  token      String    @unique @db.VarChar(200)
+  platform   String    @db.VarChar(10)
+  disabledAt DateTime? @map("disabled_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_devices")
+}
+
+/// One private thread per booking: the ride's driver and that passenger.
+model Message {
+  id        String   @id @default(uuid()) @db.Uuid
+  bookingId String   @map("booking_id") @db.Uuid
+  senderId  String   @map("sender_id") @db.Uuid
+  body      String   @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  sender  User    @relation(fields: [senderId], references: [id])
+
+  @@index([bookingId, createdAt])
+  @@map("messages")
+}
+
+/// How far each participant has read a booking's thread.
+model ChatRead {
+  bookingId  String   @map("booking_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  lastReadAt DateTime @map("last_read_at") @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([bookingId, userId])
+  @@map("chat_reads")
 }
 
 // ---------- Administration ----------

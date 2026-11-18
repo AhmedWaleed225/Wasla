@@ -24,6 +24,10 @@ const envSchema = z
       .optional()
       .transform((v) => (v ? v : undefined))
       .pipe(z.string().regex(/^\d{6}$/, 'OTP_MOCK_FIXED_CODE must be 6 digits').optional()),
+    /** none: notifications stay in the in-app inbox only. expo: also sent through Expo's push service. */
+    PUSH_PROVIDER: z.enum(['none', 'expo']).default('none'),
+    /** Optional; required only if "enhanced push security" is turned on for the Expo project. */
+    EXPO_ACCESS_TOKEN: z.string().optional(),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   })
   .superRefine((env, ctx) => {

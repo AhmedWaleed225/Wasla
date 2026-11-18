@@ -65,3 +65,19 @@ export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
 
 export const ListScope = { UPCOMING: 'upcoming', PAST: 'past' } as const;
 export type ListScope = (typeof ListScope)[keyof typeof ListScope];
+
+/** In-app notifications. Text is rendered from the type and its data, in the reader's language. */
+export const NotificationType = {
+  BOOKING_REQUESTED: 'BOOKING_REQUESTED', // to driver
+  BOOKING_CONFIRMED: 'BOOKING_CONFIRMED', // to driver (instant booking)
+  BOOKING_ACCEPTED: 'BOOKING_ACCEPTED', // to passenger
+  BOOKING_DECLINED: 'BOOKING_DECLINED', // to passenger
+  BOOKING_EXPIRED: 'BOOKING_EXPIRED', // to passenger
+  BOOKING_CANCELLED: 'BOOKING_CANCELLED', // to driver, by passenger
+  RIDE_CANCELLED: 'RIDE_CANCELLED', // to passengers, by driver
+  RIDE_COMPLETED: 'RIDE_COMPLETED', // to passengers
+} as const;
+export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
+
+export const PushPlatform = { IOS: 'ios', ANDROID: 'android' } as const;
+export type PushPlatform = (typeof PushPlatform)[keyof typeof PushPlatform];

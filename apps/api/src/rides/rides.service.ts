@@ -14,6 +14,8 @@ import {
   type UpdateRideInput,
 } from '@wasla/shared';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService, rideData } from '../notifications/notifications.service';
+import { displayNameOf } from '../users/display-name';
 import { badRequest, conflict, forbidden, notFound } from '../common/app-exception';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -44,6 +46,7 @@ export class RidesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ---------- Publishing ----------
@@ -165,10 +168,14 @@ export class RidesService {
 
   /** Cancels the ride and every active booking on it, in one transaction. */
   async cancel(userId: string, rideId: string, reason?: string): Promise<RideDetailDto> {
-    await this.prisma.$transaction(async (tx) => {
+    const notes = await this.prisma.$transaction(async (tx) => {
       const ride = await this.lockOwnRide(tx, userId, rideId);
       if (ride.status !== 'SCHEDULED') throw conflict('RIDE_NOT_SCHEDULED');
       const now = new Date();
+      const toTell = await tx.booking.findMany({
+        where: { rideId, status: { in: [...ACTIVE_STATUSES] } },
+        select: { id: true, passengerId: true },
+      });
       const affected = await tx.booking.updateMany({
         where: { rideId, status: { in: [...ACTIVE_STATUSES] } },
         data: { status: 'CANCELLED_BY_DRIVER', cancelledAt: now, cancelReason: reason ?? null },
@@ -188,16 +195,23 @@ export class RidesService {
         },
         tx,
       );
+      const driverName = await this.nameOf(tx, userId);
+      return this.notifications.create(
+        tx,
+        toTell.map((b) => ({ userId: b.passengerId, type: 'RIDE_CANCELLED' as const, rideId, bookingId: b.id, data: rideData(ride, driverName) })),
+      );
     });
+    this.notifications.dispatch(notes);
     return this.detail(userId, rideId);
   }
 
   /** After departure the driver closes the ride: confirmed seats complete, unanswered requests lapse. */
   async complete(userId: string, rideId: string): Promise<RideDetailDto> {
-    await this.prisma.$transaction(async (tx) => {
+    const notes = await this.prisma.$transaction(async (tx) => {
       const ride = await this.lockOwnRide(tx, userId, rideId);
       if (ride.status !== 'SCHEDULED') throw conflict('RIDE_NOT_SCHEDULED');
       if (ride.departureAt > new Date()) throw conflict('RIDE_NOT_DEPARTED');
+      const riders = await tx.booking.findMany({ where: { rideId, status: 'CONFIRMED' }, select: { id: true, passengerId: true } });
       await tx.booking.updateMany({ where: { rideId, status: 'CONFIRMED' }, data: { status: 'COMPLETED' } });
       await tx.booking.updateMany({ where: { rideId, status: 'PENDING' }, data: { status: 'EXPIRED' } });
       await tx.ride.update({ where: { id: rideId }, data: { status: 'COMPLETED', completedAt: new Date() } });
@@ -205,7 +219,12 @@ export class RidesService {
         { actorType: 'USER', actorId: userId, action: 'RIDE_COMPLETED', entityType: 'ride', entityId: rideId },
         tx,
       );
+      return this.notifications.create(
+        tx,
+        riders.map((b) => ({ userId: b.passengerId, type: 'RIDE_COMPLETED' as const, rideId, bookingId: b.id, data: rideData(ride) })),
+      );
     });
+    this.notifications.dispatch(notes);
     return this.detail(userId, rideId);
   }
 
@@ -327,6 +346,11 @@ export class RidesService {
   }
 
   // ---------- Rules ----------
+
+  private async nameOf(tx: Tx, userId: string): Promise<string> {
+    const p = await tx.userProfile.findUnique({ where: { userId } });
+    return p ? displayNameOf(p.fullName, p.showFullLastName) : '';
+  }
 
   private checkDepartureWindow(dep: Date) {
     const now = Date.now();

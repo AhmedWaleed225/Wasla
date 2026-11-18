@@ -69,6 +69,7 @@ const ICONS = {
   ),
   plus: <Path d="M12 5v14M5 12h14" />,
   minus: <Path d="M5 12h14" />,
+  send: <Path d="M4 12 20 4l-6 16-3-7z" />,
   clock: (
     <>
       <Circle cx={12} cy={12} r={9} />
@@ -80,7 +81,7 @@ const ICONS = {
 export type IconName = keyof typeof ICONS;
 
 /** Icons that point somewhere and must mirror in Arabic. */
-const DIRECTIONAL: IconName[] = ['back', 'chevron'];
+const DIRECTIONAL: IconName[] = ['back', 'chevron', 'send'];
 
 export function Icon({ name, size = 20, color = colors.text, strokeWidth = 1.8 }: { name: IconName; size?: number; color?: ColorValue; strokeWidth?: number }) {
   const mirror = I18nManager.isRTL && DIRECTIONAL.includes(name);

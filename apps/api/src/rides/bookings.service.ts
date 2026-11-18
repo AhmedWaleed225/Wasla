@@ -1,7 +1,9 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import type { Booking, BookingStatus, Prisma } from '@prisma/client';
+import type { Booking, BookingStatus, Notification, Prisma } from '@prisma/client';
 import { RIDE_RULES, type BookingDto } from '@wasla/shared';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService, rideData } from '../notifications/notifications.service';
+import { displayNameOf } from '../users/display-name';
 import { AppException, conflict, forbidden, notFound } from '../common/app-exception';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -29,7 +31,13 @@ export class BookingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  private async nameOf(tx: Tx, userId: string): Promise<string> {
+    const p = await tx.userProfile.findUnique({ where: { userId } });
+    return p ? displayNameOf(p.fullName, p.showFullLastName) : '';
+  }
 
   /**
    * Books seats. Correct under concurrency:
@@ -53,7 +61,7 @@ export class BookingsService {
     if (!passenger.profile) throw forbidden('PROFILE_REQUIRED');
 
     try {
-      const { booking, replayed } = await this.prisma.$transaction(async (tx) => {
+      const { booking, replayed, notes } = await this.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM rides WHERE id = ${rideId}::uuid FOR UPDATE`;
         // A retry with the same key may have been waiting on the lock while the first attempt committed.
         if (idempotencyKey) {
@@ -62,7 +70,7 @@ export class BookingsService {
           });
           if (prior) {
             if (prior.rideId !== rideId) throw new AppException('IDEMPOTENCY_KEY_REUSED', HttpStatus.UNPROCESSABLE_ENTITY);
-            return { booking: prior, replayed: true };
+            return { booking: prior, replayed: true, notes: [] as Notification[] };
           }
         }
         const ride = await tx.ride.findUnique({ where: { id: rideId }, include: { driver: { select: { status: true } } } });
@@ -111,8 +119,18 @@ export class BookingsService {
           },
           tx,
         );
-        return { booking: created, replayed: false };
+        const notes = await this.notifications.create(tx, [
+          {
+            userId: ride.driverId,
+            type: instant ? 'BOOKING_CONFIRMED' : 'BOOKING_REQUESTED',
+            rideId,
+            bookingId: created.id,
+            data: rideData(ride, displayNameOf(passenger.profile!.fullName, passenger.profile!.showFullLastName)),
+          },
+        ]);
+        return { booking: created, replayed: false, notes };
       });
+      this.notifications.dispatch(notes);
       return { booking: await this.toDto(booking, passengerId), replayed };
     } catch (err) {
       // Two identical retries raced: the other one won, so return its result.
@@ -129,7 +147,7 @@ export class BookingsService {
   async cancelByPassenger(passengerId: string, bookingId: string, reason?: string): Promise<BookingDto> {
     const b = await this.prisma.booking.findFirst({ where: { id: bookingId, passengerId }, select: { rideId: true } });
     if (!b) throw notFound('BOOKING_NOT_FOUND');
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const { updated, notes } = await this.prisma.$transaction(async (tx) => {
       const ride = await this.lockRide(tx, b.rideId);
       const booking = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
       if (!ACTIVE_STATUSES.includes(booking.status as (typeof ACTIVE_STATUSES)[number])) throw conflict('BOOKING_NOT_CANCELLABLE');
@@ -139,8 +157,12 @@ export class BookingsService {
         { actorType: 'USER', actorId: passengerId, action: 'BOOKING_CANCELLED', entityType: 'booking', entityId: bookingId },
         tx,
       );
-      return result;
+      const notes = await this.notifications.create(tx, [
+        { userId: ride.driverId, type: 'BOOKING_CANCELLED', rideId: ride.id, bookingId, data: rideData(ride, await this.nameOf(tx, passengerId)) },
+      ]);
+      return { updated: result, notes };
     });
+    this.notifications.dispatch(notes);
     return this.toDto(updated, passengerId);
   }
 
@@ -150,7 +172,7 @@ export class BookingsService {
       select: { rideId: true },
     });
     if (!b) throw notFound('BOOKING_NOT_FOUND');
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const { updated, notes } = await this.prisma.$transaction(async (tx) => {
       const ride = await this.lockRide(tx, b.rideId);
       const booking = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
       const now = new Date();
@@ -169,8 +191,18 @@ export class BookingsService {
         },
         tx,
       );
-      return result;
+      const notes = await this.notifications.create(tx, [
+        {
+          userId: booking.passengerId,
+          type: accept ? 'BOOKING_ACCEPTED' : 'BOOKING_DECLINED',
+          rideId: ride.id,
+          bookingId,
+          data: rideData(ride, await this.nameOf(tx, driverId)),
+        },
+      ]);
+      return { updated: result, notes };
     });
+    this.notifications.dispatch(notes);
     return this.toDto(updated, driverId);
   }
 
@@ -211,14 +243,18 @@ export class BookingsService {
     let expired = 0;
     for (const d of due) {
       try {
-        await this.prisma.$transaction(async (tx) => {
-          await this.lockRide(tx, d.rideId);
+        const notes = await this.prisma.$transaction(async (tx) => {
+          const ride = await this.lockRide(tx, d.rideId);
           const booking = await tx.booking.findUniqueOrThrow({ where: { id: d.id } });
-          if (booking.status !== 'PENDING') return; // answered meanwhile
+          if (booking.status !== 'PENDING') return []; // answered meanwhile
           await this.closeAndRelease(tx, booking, 'EXPIRED', {});
           await this.audit.record({ actorType: 'SYSTEM', action: 'BOOKING_EXPIRED', entityType: 'booking', entityId: d.id }, tx);
           expired += 1;
+          return this.notifications.create(tx, [
+            { userId: booking.passengerId, type: 'BOOKING_EXPIRED', rideId: ride.id, bookingId: booking.id, data: rideData(ride) },
+          ]);
         });
+        this.notifications.dispatch(notes);
       } catch (err) {
         this.logger.error({ err, bookingId: d.id }, 'Failed to expire booking');
       }

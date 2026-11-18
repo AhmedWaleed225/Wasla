@@ -12,6 +12,9 @@ import { HealthModule } from './health/health.controller';
 import { LocationsModule } from './locations/locations.module';
 import { PrismaModule } from './prisma/prisma.service';
 import { RidesModule } from './rides/rides.module';
+import { ChatModule } from './chat/chat.controller';
+import { NotificationsModule } from './notifications/notifications.controller';
+import { NotificationsCoreModule } from './notifications/notifications.service';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -44,10 +47,13 @@ import { UsersModule } from './users/users.module';
     }),
     PrismaModule,
     AuditModule,
+    NotificationsCoreModule,
     UsersModule,
     AuthModule,
     LocationsModule,
     RidesModule,
+    ChatModule,
+    NotificationsModule,
     HealthModule,
   ],
   providers: [

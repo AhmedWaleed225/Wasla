@@ -2,6 +2,7 @@ import { Redirect, Tabs } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { ColorValue } from 'react-native';
 import { Icon, type IconName } from '../../src/components/Icon';
+import { useUnreadMessages } from '../../src/hooks/useUnread';
 import { useAuth } from '../../src/stores/auth';
 import { colors, fonts } from '../../src/theme';
 
@@ -14,6 +15,7 @@ export default function TabsLayout() {
   const { t } = useTranslation();
   const status = useAuth((s) => s.status);
   const me = useAuth((s) => s.me);
+  const unreadMessages = useUnreadMessages();
   if (status !== 'signedIn') return <Redirect href="/" />;
   if (!me?.profile) return <Redirect href="/onboarding/profile" />;
 
@@ -31,7 +33,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="home" options={{ title: t('tabs.home'), tabBarIcon: icon('home') }} />
       <Tabs.Screen name="explore" options={{ title: me.activeRole === 'DRIVER' ? t('tabs.offer') : t('tabs.explore'), tabBarIcon: icon(me.activeRole === 'DRIVER' ? 'plus' : 'search') }} />
       <Tabs.Screen name="trips" options={{ title: t('tabs.trips'), tabBarIcon: icon('calendar') }} />
-      <Tabs.Screen name="messages" options={{ title: t('tabs.messages'), tabBarIcon: icon('chat') }} />
+      <Tabs.Screen name="messages" options={{ title: t('tabs.messages'), tabBarIcon: icon('chat'), tabBarBadge: unreadMessages > 0 ? unreadMessages : undefined }} />
       <Tabs.Screen name="profile" options={{ title: t('tabs.profile'), tabBarIcon: icon('user') }} />
     </Tabs>
   );

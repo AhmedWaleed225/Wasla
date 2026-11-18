@@ -1,5 +1,9 @@
 import type {
   BookingDto,
+  ConversationDto,
+  MessageDto,
+  MessagePageDto,
+  NotificationPageDto,
   CancelInput,
   CreateBookingInput,
   CreateRideInput,
@@ -74,4 +78,20 @@ export const bookingsApi = {
   cancel: (id: string, input: CancelInput = {}) => api<BookingDto>(`/bookings/${id}/cancel`, { method: 'POST', body: input }),
   accept: (id: string) => api<BookingDto>(`/bookings/${id}/accept`, { method: 'POST' }),
   decline: (id: string) => api<BookingDto>(`/bookings/${id}/decline`, { method: 'POST' }),
+};
+
+export const notificationsApi = {
+  list: (before?: string) => api<NotificationPageDto>('/me/notifications', { query: { before } }),
+  unreadCount: () => api<{ unreadCount: number }>('/me/notifications/unread-count'),
+  markRead: (input: { ids?: string[]; all?: boolean }) =>
+    api<{ unreadCount: number }>('/me/notifications/read', { method: 'POST', body: input }),
+};
+
+export const chatApi = {
+  conversations: () => api<ConversationDto[]>('/me/conversations'),
+  unreadCount: () => api<{ unreadCount: number }>('/me/conversations/unread-count'),
+  messages: (bookingId: string, page: { before?: string; after?: string } = {}) =>
+    api<MessagePageDto>(`/bookings/${bookingId}/messages`, { query: page }),
+  send: (bookingId: string, body: string) => api<MessageDto>(`/bookings/${bookingId}/messages`, { method: 'POST', body: { body } }),
+  markRead: (bookingId: string) => api<void>(`/bookings/${bookingId}/messages/read`, { method: 'POST' }),
 };

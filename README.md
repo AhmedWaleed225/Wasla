@@ -14,7 +14,7 @@ The approved design lives in the Wasla design canvas (Claude Design). Design tok
 
 ---
 
-## Status — Phase 3 (core carpooling)
+## Status — Phase 4, part A (chat and notifications)
 
 | Area | State |
 |---|---|
@@ -28,8 +28,11 @@ The approved design lives in the Wasla design canvas (Claude Design). Design tok
 | Booking: instant or driver-approved, seat holds, expiry, cancellation, no overbooking | Done (cash only) |
 | Driver ride management: accept/decline, change seats, cancel, complete | Done |
 | Mobile: search, results, ride details, booking, Offer form, My Trips, cars | Done |
-| Messages tab | Placeholder — Phase 4 |
-| Maps, online payments, chat, notifications, ratings, verification, admin | Not started (Phases 4–5) |
+| Notifications inbox for every booking and ride event, Arabic/English | Done |
+| Push notifications (Expo) | API done, off by default (`PUSH_PROVIDER`); the app doesn't register for push yet |
+| Private chat per booking (driver ↔ that passenger), unread counts, "seen" | Done (polling, not live sockets) |
+| Maps, online payments, real SMS, file uploads | Not started — each needs a provider account (Phase 4, part B) |
+| Ratings, verification, safety tools, admin dashboard | Not started (Phase 5) |
 
 See **Known limitations** at the bottom.
 
@@ -146,7 +149,12 @@ landmark search (abbreviations, Arabic without hamza, Arabic-Indic digits), owne
 saved places, and for rides: publishing rules (lead time, seats, price caps, overlap, women-only),
 search matching, instant and request bookings, **8 passengers racing for 3 seats** (exactly 3 win),
 a passenger tapping "book" 5 times at once (one booking), idempotent retries, cancellations returning
-seats, request expiry, locked price/time once booked, ride cancellation and completion.
+seats, request expiry, locked price/time once booked, ride cancellation and completion; notifications for every booking event (and none with phone numbers),
+read/unread scoped to the owner, push text in the reader's language with dead tokens dropped; chat open
+only to the driver and that passenger, trimmed and length-limited, closed after cancellation or a day
+after departure, immutable messages.
+
+Each e2e run wipes the `wasla_test` database first (it refuses any database not named `*_test`).
 
 ## Project layout
 
@@ -160,6 +168,8 @@ apps/api/
   src/users/                      profile, roles
   src/locations/                  landmark search, saved places
   src/rides/                      cars, rides, search, bookings, request expiry
+  src/notifications/              inbox, push adapter (none | expo), device tokens
+  src/chat/                       per-booking chat
   src/common/                     error filter, Zod validation pipe
 apps/mobile/
   app/                            screens (Expo Router)
@@ -210,7 +220,10 @@ All enforced by the API; the numbers live in `packages/shared/src/rides.ts`.
   car checks arrive in Phase 5 and must gate publishing before public launch.
 - **Cash only.** Online payment needs a real provider (Paymob, Fawry or similar) in Phase 4.
 - **No map yet.** Places are picked from the landmark list; pins and maps arrive in Phase 4.
-- **No notifications.** Drivers see new requests only when they open the ride; push notifications are Phase 4.
+- **Push is off.** The API can send through Expo (`PUSH_PROVIDER=expo`), but the app doesn't ask for
+  permission or register its token yet: that needs `expo-notifications` and an EAS project id. Until then
+  the inbox and badges refresh every 15–30 seconds while the app is open.
+- **Chat polls** every 4 seconds on an open chat. WebSockets (or push-triggered refresh) are a later step.
 - **One route per ride**: no intermediate stops yet. Search matches the ride's start and end only.
 - **Request expiry runs in-process** every minute; fine for one or several instances (each booking is
   re-checked under a lock), but a dedicated job runner is better at scale.

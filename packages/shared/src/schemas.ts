@@ -263,3 +263,50 @@ export const idempotencyKeySchema = z
   .string()
   .trim()
   .regex(/^[A-Za-z0-9_-]{8,64}$/, 'IDEMPOTENCY_KEY_FORMAT');
+
+// ---------- Messaging & notifications ----------
+
+export const CHAT_RULES = {
+  maxMessageLength: 1000,
+  /** Chat stays open this long after departure so people can sort out a forgotten bag. */
+  openHoursAfterDeparture: 24,
+  pageSize: 50,
+} as const;
+
+export const sendMessageSchema = z.object({
+  body: z
+    .string()
+    // Drop control characters except newlines and tabs, then trim.
+    .transform((v) => v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim())
+    .refine((v) => v.length > 0, 'CHAT_MESSAGE_EMPTY')
+    .refine((v) => v.length <= CHAT_RULES.maxMessageLength, 'CHAT_MESSAGE_TOO_LONG'),
+});
+export type SendMessageInput = z.input<typeof sendMessageSchema>;
+
+export const messagePageSchema = z.object({
+  /** Messages strictly before this message id (older page). */
+  before: z.string().uuid().optional(),
+  /** Messages strictly after this message id (polling for new ones). */
+  after: z.string().uuid().optional(),
+});
+
+export const notificationPageSchema = z.object({
+  before: z.string().uuid().optional(),
+});
+
+export const markNotificationsReadSchema = z
+  .object({
+    ids: z.array(z.string().uuid()).max(100).optional(),
+    all: z.boolean().optional(),
+  })
+  .refine((v) => v.all === true || (v.ids && v.ids.length > 0), 'VALIDATION_EMPTY_UPDATE');
+export type MarkNotificationsReadInput = z.infer<typeof markNotificationsReadSchema>;
+
+export const pushDeviceSchema = z.object({
+  token: z
+    .string()
+    .trim()
+    .regex(/^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]{10,}\]$/, 'PUSH_TOKEN_FORMAT'),
+  platform: z.enum(['ios', 'android']),
+});
+export type PushDeviceInput = z.infer<typeof pushDeviceSchema>;

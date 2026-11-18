@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RIDE_RULES, type DriverBookingDto, type RideDetailDto } from '@wasla/shared';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, View } from 'react-native';
@@ -22,6 +22,8 @@ function useRefreshLists() {
     void qc.invalidateQueries({ queryKey: ['me'] });
   };
 }
+
+const openChat = (bookingId: string) => router.push({ pathname: '/chat/[bookingId]', params: { bookingId } });
 
 function confirm(title: string, body: string, yes: string, no: string, onYes: () => void) {
   Alert.alert(title, body, [
@@ -174,6 +176,7 @@ function PassengerPanel({ ride }: { ride: RideDetailDto }) {
         </View>
         {mine.pickupNote ? <T variant="meta" muted>“{mine.pickupNote}”</T> : null}
         <Notice tone="info" icon="cash" text={t('ride.payCash')} />
+        <Button title={t('chat.openChat')} kind="tonal" icon="chat" onPress={() => openChat(mine.id)} />
         {cancel.error ? <Notice tone="error" icon="close" text={cancel.error.message} /> : null}
         <Button
           title={t('ride.cancelBooking')}
@@ -190,6 +193,7 @@ function PassengerPanel({ ride }: { ride: RideDetailDto }) {
       <View style={{ gap: 8 }}>
         {mine ? <StatusTag booking={mine.status} /> : null}
         <Notice tone="neutral" icon="lock" text={t('ride.closed')} />
+        {mine?.status === 'COMPLETED' ? <Button title={t('chat.openChat')} kind="tonal" icon="chat" onPress={() => openChat(mine.id)} /> : null}
       </View>
     );
   }
@@ -307,6 +311,9 @@ function PassengerRow({ booking, rideId, canAnswer }: { booking: DriverBookingDt
       {booking.pickupNote ? <T variant="meta" muted>“{booking.pickupNote}”</T> : null}
       {booking.status === 'PENDING' && booking.expiresAt ? <T variant="caption" muted>⏱ {f.dayTime(booking.expiresAt)}</T> : null}
       {err ? <Notice tone="error" icon="close" text={err.message} /> : null}
+      {booking.status === 'PENDING' || booking.status === 'CONFIRMED' || booking.status === 'COMPLETED' ? (
+        <Button title={t('chat.openChat')} kind="ghost" icon="chat" onPress={() => openChat(booking.id)} />
+      ) : null}
       {canAnswer && booking.status === 'PENDING' ? (
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Button title={t('ride.decline')} kind="secondary" style={{ flex: 1 }} loading={decline.isPending} disabled={accept.isPending} onPress={() => decline.mutate()} />

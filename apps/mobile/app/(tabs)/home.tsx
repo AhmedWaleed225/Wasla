@@ -3,13 +3,14 @@ import type { LocationDto, UserRole } from '@wasla/shared';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { meApi } from '../../src/api/endpoints';
 import { Icon } from '../../src/components/Icon';
 import { Screen } from '../../src/components/Screen';
 import { SearchCard } from '../../src/components/SearchCard';
 import { Avatar, Button, Card, Chip, Notice, Segmented, T } from '../../src/components/ui';
 import { usePlaceName, useSavedPlaces } from '../../src/hooks/useSavedPlaces';
+import { useUnreadNotifications } from '../../src/hooks/useUnread';
 import { useAuth } from '../../src/stores/auth';
 import { useTripDraft } from '../../src/stores/trip-draft';
 import { colors, space } from '../../src/theme';
@@ -27,6 +28,7 @@ export default function Home() {
   const { data: saved } = useSavedPlaces();
   const names = usePlaceName();
   const isDriver = me.activeRole === 'DRIVER';
+  const unread = useUnreadNotifications();
 
   // Prefill Home → Work the first time saved places arrive.
   useEffect(() => {
@@ -72,6 +74,20 @@ export default function Home() {
           <T variant="caption" muted>{t(greetingKey())}</T>
           <T variant="h3">{me.profile?.fullName.split(' ')[0]}</T>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${t('notifications.title')}${unread ? `: ${unread}` : ''}`}
+          onPress={() => router.push('/notifications')}
+          hitSlop={6}
+          style={{ width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Icon name="bell" />
+          {unread > 0 ? (
+            <View style={{ position: 'absolute', top: 6, end: 6, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' }}>
+              <T variant="caption" color="#fff" weight={700} style={{ fontSize: 10, lineHeight: 14 }}>{unread > 9 ? '9+' : unread}</T>
+            </View>
+          ) : null}
+        </Pressable>
       </View>
 
       <Segmented<UserRole>
